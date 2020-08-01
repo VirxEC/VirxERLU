@@ -259,7 +259,7 @@ class goto:
             agent.push(flip(Vector(y=250)))
             return
 
-        if agent.me.boost < 30 or (agent.playstyle is agent.playstyles.Defensive and agent.predictions['self_from_goal'] < 4000):
+        if agent.me.boost < 30:
             agent.controller.boost = False
         agent.controller.handbrake = True if abs(angles[1]) >= 2.3 or (agent.me.local(agent.me.velocity).x >= 1400 and abs(angles[1]) > 1.5) else agent.controller.handbrake
 
@@ -283,7 +283,7 @@ class shadow:
 
         ball_loc = agent.ball.location.y * side(agent.team)
 
-        if agent.time - self.start_time > 0.5 or agent.playstyle is agent.playstyles.Defensive or ball_loc > 2560:
+        if agent.time - self.start_time > 0.5 or ball_loc > 2560:
             agent.pop()
             return
 
@@ -313,10 +313,6 @@ class retreat:
         self.facing = False
 
     def run(self, agent):
-        if agent.ball.location.y * side(agent.team) < 2560 and agent.playstyle is not agent.playstyles.Defensive:
-            agent.pop()
-            return
-
         team_to_ball = [car.location.flat_dist(agent.ball.location) for car in agent.friends if car.location.y * side(agent.team) >= agent.ball.location.y * side(agent.team) - 50 and abs(car.location.x) < abs(agent.ball.location.x)]
         self_to_ball = agent.me.location.flat_dist(agent.ball.location)
         team_to_ball.append(self_to_ball)
