@@ -18,7 +18,8 @@ class Bot(agent.VirxERLU):
 
     def handle_match_comm(self, msg):
         # This is for handling any incoming match communications
-        self.print(msg)
+        if msg['team'] is self.team:
+            self.print(msg)
 
     def handle_quick_chat(self, index, team, quick_chat):
         # This is for hanling any incoming quick chats
