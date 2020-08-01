@@ -1,7 +1,8 @@
-from util import agent, routines, tools
+from util import routines, tools, utils
+from util.agent import VirxERLU, Vector
 
 
-class Bot(agent.VirxERLU):
+class Bot(VirxERLU):
     # If your bot encounters an error, VirxERLU will do it's best to keep your bot from crashing.
     # VirxERLU uses a stack system for it's routines. A stack is a first-in, last-out system. The stack is a list of routines.
     def init(self):
@@ -10,11 +11,13 @@ class Bot(agent.VirxERLU):
 
     def demolished(self):
         # Code to run when the bot is demolished
-        pass
+        if not self.is_clear():
+            self.clear()
 
     def run(self):
         # Strategy code
-        pass
+        if self.is_clear():
+            self.push(routines.atba())
 
     def handle_match_comm(self, msg):
         # This is for handling any incoming match communications
