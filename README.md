@@ -20,5 +20,5 @@ VirxERLU will be updated after every tournament with the latest, *stable* featur
 
 If you're going to use VirxERLU, be sure to watch the GoslingUtils tutorial first. The VirxERLU tutorial is only for the differences between the utils.
 
-RLBot/GoslingUtils tutorial: https://www.youtube.com/watch?v=lPkID_IH88U
-VirxERLU tutorial: https://www.youtube.com/watch?v=UpwiAgcAKgs
++ RLBot/GoslingUtils tutorial: [https://www.youtube.com/watch?v=lPkID_IH88U](https://www.youtube.com/watch?v=lPkID_IH88U)
++ VirxERLU tutorial: [https://www.youtube.com/watch?v=UpwiAgcAKgs](https://www.youtube.com/watch?v=UpwiAgcAKgs)
