@@ -2,8 +2,12 @@
 
 Big thanks to ddthj/GoslingUtils for the basis of VirxERLU. This version, however, improves upon many things, including pathfinding, finding shots, and aerials. This also improves on the general performance of the agent.
 
-+ [RLBot](https://rlbot.org/)
-+ [VirxEC Showcase](https://www.virxcase.dev/)
++ [RLBot](http://www.rlbot.org/)
++ [VirxERLU Wiki](https://github.com/VirxEC/VirxERLU/wiki)
++ [RLBot Wiki](https://github.com/RLBot/RLBot/wiki)
++ [RLBot Discord](https://discord.gg/rlbot)
++ [RLBot Youtube](https://www.youtube.com/channel/UCu8scB_k94Kh-iO979QTDJA)
++ [VirxEC Showcase](https://www.virxcase.dev)
 + [VirxERLU on VirxEC Showcase](https://virxerlu.virxcase.dev/)
 + [VirxEB on VirxEC Showcase](https://virxeb.virxcase.dev/)
 
@@ -22,3 +26,7 @@ If you're going to use VirxERLU, be sure to watch the GoslingUtils tutorial firs
 
 + RLBot/GoslingUtils tutorial: [youtube.com/watch?v=lPkID_IH88U](https://www.youtube.com/watch?v=lPkID_IH88U)
 + VirxERLU tutorial: [youtube.com/watch?v=UpwiAgcAKgs](https://www.youtube.com/watch?v=UpwiAgcAKgs)
+
+## Wiki
+
+[github.com/VirxEC/VirxERLU/wiki](https://github.com/VirxEC/VirxERLU/wiki)
