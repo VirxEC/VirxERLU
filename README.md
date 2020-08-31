@@ -24,6 +24,10 @@ I made VirxERLU because it forces me to keep innovating on my bot in order to st
 
 VirxERLU will be updated after every tournament with the latest, *stable* features of VirxEB.
 
+## Things to delete
+
+In the root folder, you can delete `CNAME` and `_config.yml`.
+
 ## Wiki
 
 The wiki is the best way to get general information about VirxERLU.
