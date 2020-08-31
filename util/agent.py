@@ -183,6 +183,7 @@ class VirxERLU(BaseAgent):
         self.me.update(packet)
         self.game.update(self.team, packet)
         self.time = self.game.time
+        self.gravity = self.game.gravity
 
         # When a new kickoff begins we empty the stack
         if not self.kickoff_flag and self.game.round_active and self.game.kickoff:
@@ -215,7 +216,11 @@ class VirxERLU(BaseAgent):
                 if not self.is_clear():
                     self.clear()
             elif self.game.round_active:
-                self.run()  # Run strategy code; This is a very expensive function to run
+                try:
+                    self.run()  # Run strategy code; This is a very expensive function to run
+                except Exception:
+                    print(self.name)
+                    print_exc()
 
                 if self.debugging:
                     if self.debug_3d_bool:
@@ -254,7 +259,7 @@ class VirxERLU(BaseAgent):
             print_exc()
             return SimpleControllerState()
 
-    def handle_match_comm(self, bot, team, msg):
+    def handle_match_comm(self, msg):
         pass
 
     def run(self):
@@ -399,6 +404,7 @@ class game_object:
         self.match_ended = False
         self.friend_score = 0
         self.foe_score = 0
+        self.gravity = Vector()
 
     def update(self, team, packet):
         game = packet.game_info
@@ -410,6 +416,7 @@ class game_object:
         self.match_ended = game.is_match_ended
         self.friend_score = packet.teams[team].score
         self.foe_score = packet.teams[not team].score
+        self.gravity.z = game.world_gravity_z
 
 
 class Matrix3:
@@ -553,8 +560,8 @@ class Vector:
         # Note that this is only 2D, in the x and y axis
         return Vector((math.cos(angle)*self.x) - (math.sin(angle)*self.y), (math.sin(angle)*self.x) + (math.cos(angle)*self.y), self.z)
 
-    def clamp(self, start: Vector, end: Vector) -> Vector:
-        # Similar to integer clamping, Vector's clamp() forces the Vector's direction between a start and end Vector
+    def clamp2D(self, start: Vector, end: Vector) -> Vector:
+        # Similar to integer clamping, Vector's clamp2D() forces the Vector's direction between a start and end Vector
         # Such that Start < Vector < End in terms of clockwise rotation
         # Note that this is only 2D, in the x and y axis
         s = self.normalize()
@@ -565,6 +572,19 @@ class Vector:
         if start.dot(s) < end.dot(s):
             return end
         return start
+
+    def clamp(self, start: Vector, end: Vector) -> Vector:
+        # This extends clamp2D so it also clamps the vector's z
+        s = self.clamp2D(start, end)
+        start_z = min(start.z, end.z)
+        end_z = max(start.z, end.z)
+
+        if s.z < start_z:
+            s.z = start_z
+        elif s.z > end_z:
+            s.z = end_z
+
+        return s
 
     def dist(self, value: Vector) -> float:
         # Distance between 2 vectors

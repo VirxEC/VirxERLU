@@ -40,7 +40,7 @@ def defaultThrottle(agent, target_speed):
     car_speed = agent.me.local_velocity().x
     t = target_speed - car_speed
     agent.controller.throttle = cap((t**2) * sign(t)/1000, -1, 1)
-    agent.controller.boost = (t > 150 or (target_speed > 1400 and t > agent.boost_accel / 10)) and agent.controller.throttle == 1 and (agent.me.airborne or (abs(agent.controller.steer) < 0.1 and not agent.me.airborne))
+    agent.controller.boost = (t > 150 or (target_speed > 1400 and t > agent.boost_accel / 30)) and agent.controller.throttle == 1 and (agent.me.airborne or (abs(agent.controller.steer) < 0.1 and not agent.me.airborne))
     return car_speed
 
 
@@ -87,10 +87,12 @@ def quadratic(a, b, c):
     return -1, -1
 
 
-def shot_valid(agent, shot, threshold=100, target=None):
+def shot_valid(agent, shot, target=None):
     # Returns True if the ball is still where the shot anticipates it to be
     if target is None:
         target = shot.ball_location
+
+    threshold = agent.best_shot_value * 2
 
     # First finds the two closest slices in the ball prediction to shot's intercept_time
     # threshold controls the tolerance we allow the ball to be off by
