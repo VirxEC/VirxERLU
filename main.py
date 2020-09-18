@@ -55,7 +55,7 @@ class Bot(VirxERLU):
                 # Push a generic kickoff to the stack
                 self.push(routines.generic_kickoff())
         # If we're shooting (and we want to run this at 30tps)
-        elif self.shooting and self.odd_tick == 0:
+        elif self.odd_tick == 0 and self.kickoff_done:
             shot = None
             # If the ball is on the enemy's side of the field, or slightly on our side
             if self.ball.location.y * utils.side(self.team) < 640:
@@ -70,9 +70,9 @@ class Bot(VirxERLU):
                 new_shot_name = shot.__class__.__name__
 
                 # If the shots are the same type
-                if new_shot_name is current_shot_name:
+                if self.shooting and new_shot_name is current_shot_name:
                     # Update the existing shot with the new information
-                    self.stack[0].update(shot, self.best_shot_value)
+                    self.stack[0].update(shot)
                 # If the shots are of different types
                 else:
                     # Clear the stack

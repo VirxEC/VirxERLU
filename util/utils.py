@@ -40,7 +40,7 @@ def defaultThrottle(agent, target_speed):
     car_speed = agent.me.local_velocity().x
     t = target_speed - car_speed
     agent.controller.throttle = cap((t**2) * sign(t)/1000, -1, 1)
-    agent.controller.boost = (t > 150 or (target_speed > 1400 and t > agent.boost_accel / 30)) and agent.controller.throttle == 1 and (agent.me.airborne or (abs(agent.controller.steer) < 0.1 and not agent.me.airborne))
+    agent.controller.boost = (t > 150 or (target_speed > 1400 and t > agent.boost_accel / 30)) and agent.controller.throttle == 1 and (agent.me.airborne or (abs(agent.controller.steer) < 0.25 and not agent.me.airborne))
     return car_speed
 
 
@@ -80,11 +80,17 @@ def post_correction(ball_location, left_target, right_target):
 
 def quadratic(a, b, c):
     # Returns the two roots of a quadratic
-    inside = math.sqrt((b*b) - (4*a*c))
-    if a != 0:
-        return (-b + inside)/(2*a), (-b - inside)/(2*a)
+    inside = (b*b) - (4*a*c)
 
-    return -1, -1
+    try:
+        inside = math.sqrt(inside)
+    except ValueError:
+        return -1, -1
+
+    if a == 0:
+        return -1, -1
+
+    return (-b + inside)/(2*a), (-b - inside)/(2*a)
 
 
 def shot_valid(agent, shot, target=None):

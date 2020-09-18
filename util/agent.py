@@ -43,24 +43,33 @@ class VirxERLU(BaseAgent):
 
         mutators = self.get_match_settings().MutatorSettings()
 
-        gravity = [
+        gravity = (
             Vector(z=-650),
             Vector(z=-325),
             Vector(z=-1137.5),
             Vector(z=-3250)
-        ]
+        )
 
         base_boost_accel = 991 + (2/3)
 
-        boost_accel = [
+        boost_accel = (
             base_boost_accel,
             base_boost_accel * 1.5,
             base_boost_accel * 2,
             base_boost_accel * 10
-        ]
+        )
+
+        boost_amount = (
+            "default",
+            "unlimited",
+            "slow recharge",
+            "fast recharge",
+            "no boost"
+        )
 
         self.gravity = gravity[mutators.GravityOption()]
         self.boost_accel = boost_accel[mutators.BoostStrengthOption()]
+        self.boost_amount = boost_amount[mutators.BoostOption()]
 
         self.friends = ()
         self.foes = ()
@@ -86,7 +95,7 @@ class VirxERLU(BaseAgent):
         self.kickoff_done = True
         self.shooting = False
         self.best_shot_value = 92
-        self.odd_tick = 0
+        self.odd_tick = -1
 
         self.future_ball_location_slice = 180
         self.balL_prediction_struct = None
@@ -96,7 +105,7 @@ class VirxERLU(BaseAgent):
         if not self.tournament:
             self.gui.stop()
 
-        if len(self.friends) > 0:
+        if self.match_comms is not None:
             self.match_comms.stop()
 
     @staticmethod
@@ -111,10 +120,7 @@ class VirxERLU(BaseAgent):
         self.refresh_player_lists(packet)
         self.ball.update(packet)
 
-        foe_team = -1 if self.team == 1 else 1
-        team = -foe_team
-
-        self.best_shot_value = round((92.75 + min(self.me.hitbox) / 2) * 0.99, 4)
+        self.best_shot_value = math.floor((92.75 + self.me.hitbox.width / 2))
         self.print(f"Best shot value: {self.best_shot_value}")
 
         self.init()
@@ -122,8 +128,7 @@ class VirxERLU(BaseAgent):
         self.ready = True
 
         load_time = (time_ns() - self.startup_time) / 1e+6
-        team = "Blue" if self.team == 0 else "Red"
-        print(f"{self.name} ({team}): Built game info in {load_time} milliseconds")
+        print(f"{self.name}: Built game info in {load_time} milliseconds")
 
     def refresh_player_lists(self, packet):
         # Useful to keep separate from get_ready because humans can join/leave a match
@@ -155,8 +160,7 @@ class VirxERLU(BaseAgent):
 
     def print(self, item):
         if not self.tournament:
-            team = "Blue" if self.team == 0 else "Red"
-            print(f"{self.name} ({team}): {item}")
+            print(f"{self.name}: {item}")
 
     def dbg_3d(self, item):
         self.debug[0].append(str(item))
@@ -204,7 +208,7 @@ class VirxERLU(BaseAgent):
     def get_output(self, packet):
         try:
             # Reset controller
-            self.controller.__init__()
+            self.controller.__init__(use_item=True)
 
             # Get ready, then preprocess
             if not self.ready:
