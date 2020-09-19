@@ -145,6 +145,10 @@ class double_jump:
             self.ball_location = Vector(ball.x, ball.y, ball.z)
             self.dodge_point = self.ball_location - (self.shot_vector * agent.best_shot_value)
 
+            if self.dodge_point.z > 490 or self.dodge_point.z < 380:
+                agent.pop()
+                return
+
         car_to_ball = self.ball_location - agent.me.location
         # whether we should go forwards or backwards
         angle_to_target = abs(Vector(x=1).angle2D(agent.me.local_location(self.dodge_point)))
@@ -167,8 +171,10 @@ class double_jump:
         # The adjustment slowly decreases to 0 as the bot nears the time to jump
         adjustment = car_to_dodge_point.angle2D(self.shot_vector) * distance_remaining / 2  # size of adjustment
         # controls how soon car will jump based on acceleration required
-        # we set this based on how far off we are from the target
-        jump_threshold = cap(abs(Vector(x=1).angle2D(agent.me.local_location(self.dodge_point))) * 600, 250, 350)
+        # we set this based on the time remaining
+        # bigger = later, which allows more time to align with shot vector
+        # smaller = sooner
+        jump_threshold = cap(T * 200, 250, 584)
         # factoring in how close to jump we are
         adjustment *= (cap(jump_threshold - (acceleration_required.z), 0, jump_threshold) / jump_threshold)
         # we don't adjust the final target if we are already jumping
@@ -278,6 +284,7 @@ class Aerial:
         self.target = None
 
         self.jumping = False
+        self.dodging = False
         self.ceiling = False
         self.time = -1
         self.jump_time = -1
@@ -338,14 +345,14 @@ class Aerial:
 
                 if jump_elapsed < jump_max_duration:
                     agent.controller.jump = True
-                elif self.counter < 4:
+                elif self.counter < 6:
                     self.counter += 1
 
                 if self.counter == 3:
                     agent.controller.jump = True
-                    self.counter += 1
-                elif self.counter == 4:
-                    self.jumping = False
+                    self.dodging = True
+                elif self.counter == 6:
+                    self.dodging = self.jumping = False
             elif jump_elapsed < jump_max_duration:
                 agent.controller.jump = True
             else:
@@ -363,9 +370,13 @@ class Aerial:
         agent.line(xf - Vector(z=100), xf + Vector(z=100), agent.renderer.red())
         agent.line(self.target - Vector(z=100), self.target + Vector(z=100), agent.renderer.green())
 
-        if not self.jumping:
-            target = agent.me.local(delta_x if delta_x.magnitude() > 50 else (self.target - agent.me.location))
+        if not self.dodging:
+            target = delta_x if delta_x.magnitude() > 50 else (self.target - agent.me.location)
 
+            if self.jumping:
+                target = target.flatten()
+
+            target = agent.me.local(target)
             if abs(Vector(x=1).angle(target)) > 0.005:
                 defaultPD(agent, target, upside_down=self.shot_vector.z < 0 and not self.jumping)
 
@@ -702,6 +713,10 @@ class jump_shot:
             self.ball_location = Vector(ball.x, ball.y, ball.z)
             self.dodge_point = self.ball_location - (self.shot_vector * agent.best_shot_value)
 
+            if self.dodge_point.z > 300:
+                agent.pop()
+                return
+
         car_to_ball = self.ball_location - agent.me.location
         # whether we should go forwards or backwards
         angle_to_target = abs(Vector(x=1).angle2D(agent.me.local(car_to_ball)))
@@ -724,8 +739,10 @@ class jump_shot:
         # The adjustment slowly decreases to 0 as the bot nears the time to jump
         adjustment = car_to_dodge_point.angle2D(self.shot_vector) * distance_remaining / 2  # size of adjustment
         # controls how soon car will jump based on acceleration required
-        # we set this based on how far off we are from the target
-        jump_threshold = cap(abs(Vector(x=1).angle2D(agent.me.local_location(self.dodge_point))) * 600, 250, 550)
+        # we set this based on the time remaining
+        # bigger = later, which allows more time to align with shot vector
+        # smaller = sooner
+        jump_threshold = cap(T * 200, 250, 584)
         # factoring in how close to jump we are
         adjustment *= (cap(jump_threshold - (acceleration_required.z), 0, jump_threshold) / jump_threshold)
         # we don't adjust the final target if we are already jumping
@@ -743,7 +760,8 @@ class jump_shot:
         vf = agent.me.velocity + agent.gravity * T
         xf = agent.me.location + agent.me.velocity * T + 0.5 * agent.gravity * T * T
 
-        speed_required = 2300 if distance_remaining > 2560 else distance_remaining * 0.975 / time_remaining
+        ball_l = agent.me.local_location(agent.ball.location)
+        speed_required = 2300 if (self.ball_location.z < 92 + agent.me.hitbox.height / 2 and abs(ball_l.y) < 46 and ball_l.x > agent.me.hitbox.length) or distance_remaining > 2560 else distance_remaining * 0.975 / time_remaining
         agent.dbg_2d(f"Speed required: {speed_required}")
 
         if not self.jumping:

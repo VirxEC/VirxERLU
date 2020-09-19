@@ -40,7 +40,7 @@ def find_jump_shot(agent, target, weight=None, cap_=6):
 
         ball_location = (ball_slice.physics.location.x, ball_slice.physics.location.y, ball_slice.physics.location.z)
 
-        if abs(ball_location[1]) > 5212:
+        if abs(ball_location[1]) > 5212.75:
             return  # abandon search if ball is scored at/after this point
 
         # Check if we can make a shot at this slice
@@ -79,7 +79,7 @@ def find_any_jump_shot(agent, cap_=3):
 
         ball_location = (ball_slice.physics.location.x, ball_slice.physics.location.y, ball_slice.physics.location.z)
 
-        if abs(ball_location[1]) > 5212:
+        if abs(ball_location[1]) > 5212.75:
             return
 
         shot = virxrlcu.parse_slice_for_jump_shot(time_remaining - 0.1, *game_info, ball_location, *me)
@@ -120,7 +120,7 @@ def find_double_jump(agent, target, weight=None, cap_=6):
 
         ball_location = (ball_slice.physics.location.x, ball_slice.physics.location.y, ball_slice.physics.location.z)
 
-        if abs(ball_location[1]) > 5212:
+        if abs(ball_location[1]) > 5212.75:
             return
 
         shot = virxrlcu.parse_slice_for_double_jump_with_target(time_remaining - 0.3, *game_info, ball_location, *me, *target)
@@ -156,7 +156,7 @@ def find_any_double_jump(agent, cap_=3):
 
         ball_location = (ball_slice.physics.location.x, ball_slice.physics.location.y, ball_slice.physics.location.z)
 
-        if abs(ball_location[1]) > 5212:
+        if abs(ball_location[1]) > 5212.75:
             return
 
         shot = virxrlcu.parse_slice_for_double_jump(time_remaining - 0.3, agent.best_shot_value, ball_location, *me)
@@ -199,7 +199,7 @@ def find_aerial(agent, target, weight=None, cap_=6):
 
         ball_location = (ball_slice.physics.location.x, ball_slice.physics.location.y, ball_slice.physics.location.z)
 
-        if abs(ball_location[1]) > 5212:
+        if abs(ball_location[1]) > 5212.75:
             return
 
         if min_aerial_height > ball_location[2] or ball_location[2] > max_aerial_height:
@@ -239,7 +239,7 @@ def find_any_aerial(agent, cap_=3):
 
         ball_location = (ball_slice.physics.location.x, ball_slice.physics.location.y, ball_slice.physics.location.z)
 
-        if abs(ball_location[1]) > 5212:
+        if abs(ball_location[1]) > 5212.75:
             return
 
         if min_aerial_height > ball_location[2] or ball_location[2] > max_aerial_height:
@@ -302,7 +302,7 @@ def find_shot(agent, target, weight=None, cap_=6, can_aerial=True, can_double_ju
 
         ball_location = (ball_slice.physics.location.x, ball_slice.physics.location.y, ball_slice.physics.location.z)
 
-        if abs(ball_location[1]) > 5212:
+        if abs(ball_location[1]) > 5212.75:
             return
 
         if can_jump:
@@ -370,7 +370,7 @@ def find_any_shot(agent, cap_=3, can_aerial=True, can_double_jump=True, can_jump
 
         ball_location = (ball_slice.physics.location.x, ball_slice.physics.location.y, ball_slice.physics.location.z)
 
-        if abs(ball_location[1]) > 5212:
+        if abs(ball_location[1]) > 5212.75:
             return
 
         if can_jump:
