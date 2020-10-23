@@ -1,5 +1,5 @@
 from util import routines, tools, utils
-from util.agent import VirxERLU, Vector
+from util.agent import Vector, VirxERLU
 
 
 class Bot(VirxERLU):
@@ -22,13 +22,13 @@ class Bot(VirxERLU):
                     shot = None
                     # If the ball is on the enemy's side of the field, or slightly on our side
                     if self.ball.location.y * utils.side(self.team) < 640:
-                        # Find a shot on target - disable double_jump and jump_shot if we're airborne
-                        shot = tools.find_shot(self, self.foe_goal_shot, can_double_jump=not self.me.airborne, can_jump=not self.me.airborne)
+                        # Find a shot on target - disable double_jump, jump_shot, and ground_shot if we're airborne
+                        shot = tools.find_shot(self, self.foe_goal_shot, can_double_jump=not self.me.airborne, can_jump=not self.me.airborne, can_ground=not self.me.airborne)
 
                     # If we're behind the ball and we couldn't find a shot on target
                     if shot is None and self.ball.location.y * utils.side(self.team) < self.me.location.y * utils.side(self.team):
-                        # Find any shot - disable double_jump and jump_shot if we're airborne
-                        shot = tools.find_any_shot(self, can_double_jump=not self.me.airborne, can_jump=not self.me.airborne)
+                        # Find any shot - disable double_jump, jump_shot, and ground_shot if we're airborne
+                        shot = tools.find_any_shot(self, can_double_jump=not self.me.airborne, can_jump=not self.me.airborne, can_ground=not self.me.airborne)
 
                     # If we found a shot
                     if shot is not None:
@@ -55,12 +55,17 @@ class Bot(VirxERLU):
                 # Push a generic kickoff to the stack
                 self.push(routines.generic_kickoff())
         # If we're shooting (and we want to run this at 30tps)
-        elif self.odd_tick == 0 and self.kickoff_done:
+        elif self.shooting and self.odd_tick == 0:
             shot = None
             # If the ball is on the enemy's side of the field, or slightly on our side
             if self.ball.location.y * utils.side(self.team) < 640:
-                # Find a shot on target that's faster than our current shot - disable double_jump and jump_shot if we're airborne
-                shot = tools.find_shot(self, self.foe_goal_shot, can_double_jump=not self.me.airborne, can_jump=not self.me.airborne)
+                # Find a shot on target that's faster than our current shot - disable double_jump, jump_shot, and ground_shot if we're airborne
+                shot = tools.find_shot(self, self.foe_goal_shot, can_double_jump=not self.me.airborne, can_jump=not self.me.airborne, can_ground=not self.me.airborne)
+
+            # If we're behind the ball and we couldn't find a shot on target
+            if shot is None and not self.shooting and self.ball.location.y * utils.side(self.team) < self.me.location.y * utils.side(self.team):
+                # Find any shot - disable double_jump, jump_shot, and ground_shot if we're airborne
+                shot = tools.find_any_shot(self, can_double_jump=not self.me.airborne, can_jump=not self.me.airborne, can_ground=not self.me.airborne)
 
             # If we found a shot
             if shot is not None:
@@ -70,7 +75,7 @@ class Bot(VirxERLU):
                 new_shot_name = shot.__class__.__name__
 
                 # If the shots are the same type
-                if self.shooting and new_shot_name is current_shot_name:
+                if new_shot_name is current_shot_name:
                     # Update the existing shot with the new information
                     self.stack[0].update(shot)
                 # If the shots are of different types

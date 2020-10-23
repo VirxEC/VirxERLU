@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import itertools
 import math
+import os
 from dataclasses import dataclass
+from datetime import datetime
 from time import time_ns
 from traceback import print_exc
 from typing import List, Tuple
 
-from rlbot.agents.base_agent import BaseAgent, SimpleControllerState
-
 from gui import Gui
 from match_comms import MatchComms
+from rlbot.agents.base_agent import BaseAgent, SimpleControllerState
 
 
 class VirxERLU(BaseAgent):
@@ -31,6 +32,14 @@ class VirxERLU(BaseAgent):
         self.debug_ball_path = False
         self.debug_ball_path_precision = 10
         self.disable_driving = False
+
+        T = datetime.now()
+        T = T.strftime("%Y-%m-%d %H;%M")
+
+        self.traceback_file = (
+            os.getcwd(),
+            f"-traceback ({T}).txt"
+        )
 
         if not self.tournament:
             self.gui = Gui(self)
@@ -105,8 +114,7 @@ class VirxERLU(BaseAgent):
         if not self.tournament:
             self.gui.stop()
 
-        if self.match_comms is not None:
-            self.match_comms.stop()
+        self.match_comms.stop()
 
     @staticmethod
     def is_hot_reload_enabled():
@@ -125,21 +133,16 @@ class VirxERLU(BaseAgent):
 
         self.init()
 
-        self.ready = True
-
         load_time = (time_ns() - self.startup_time) / 1e+6
         print(f"{self.name}: Built game info in {load_time} milliseconds")
+
+        self.ready = True
 
     def refresh_player_lists(self, packet):
         # Useful to keep separate from get_ready because humans can join/leave a match
         self.friends = tuple(car_object(i, packet) for i in range(packet.num_cars) if packet.game_cars[i].team is self.team and i != self.index)
         self.foes = tuple(car_object(i, packet) for i in range(packet.num_cars) if packet.game_cars[i].team != self.team)
         self.me = car_object(self.index, packet)
-
-        if len(self.friends) > 0 and self.match_comms is None:
-            self.match_comms = MatchComms(self)
-            self.print("Starting the match communication handler...")
-            self.match_comms.start()
 
     def push(self, routine):
         self.stack.append(routine)
@@ -186,6 +189,7 @@ class VirxERLU(BaseAgent):
         self.ball.update(packet)
         self.me.update(packet)
         self.game.update(self.team, packet)
+
         self.time = self.game.time
         self.gravity = self.game.gravity
 
@@ -196,14 +200,15 @@ class VirxERLU(BaseAgent):
 
         # Tells us when to go for kickoff
         self.kickoff_flag = self.game.round_active and self.game.kickoff
-        self.ball_to_goal = self.friend_goal.location.flat_dist(self.ball.location)
 
-        self.ball_prediction_struct = self.get_ball_prediction_struct()
+        self.ball_to_goal = self.friend_goal.location.flat_dist(self.ball.location)
 
         self.odd_tick += 1
 
         if self.odd_tick > 3:
             self.odd_tick = 0
+
+        self.ball_prediction_struct = self.get_ball_prediction_struct()
 
     def get_output(self, packet):
         try:
@@ -223,8 +228,22 @@ class VirxERLU(BaseAgent):
                 try:
                     self.run()  # Run strategy code; This is a very expensive function to run
                 except Exception:
-                    print(self.name)
-                    print_exc()
+                    t_file = os.path.join(self.traceback_file[0], self.name+self.traceback_file[1])
+                    print(f"ERROR in {self.name}; see '{t_file}'")
+                    print_exc(file=open(t_file, "a"))
+
+                # run the routine on the end of the stack
+                if not self.is_clear():
+                    try:
+                        r_name = self.stack[-1].__class__.__name__
+                        self.stack[-1].run(self)
+                    except Exception:
+                        t_file = os.path.join(self.traceback_file[0], r_name+self.traceback_file[1])
+                        print(f"ERROR in {self.name}'s {r_name} routine; see '{t_file}'")
+                        print_exc(file=open(t_file, "a"))
+
+                if self.is_clear() or self.stack[0].__class__.__name__ not in {'Aerial', 'jump_shot', 'block_ground_shot', 'double_jump'}:
+                    self.shooting = False
 
                 if self.debugging:
                     if self.debug_3d_bool:
@@ -239,7 +258,7 @@ class VirxERLU(BaseAgent):
                         if self.show_coords:
                             self.debug[1].insert(0, str(self.me.location.int()))
 
-                        if not self.is_clear() and self.stack[0].__class__.__name__ in {'Aerial', 'jump_shot', 'block_ground_shot', 'double_jump'}:
+                        if not self.is_clear() and self.stack[0].__class__.__name__ in {'Aerial', 'jump_shot', 'ground_shot', 'double_jump'}:
                             self.dbg_2d(round(self.stack[0].intercept_time - self.time, 4))
 
                         self.renderer.draw_string_2d(20, 300, 2, 2, "\n".join(self.debug[1]), self.renderer.team_color(alt_color=True))
@@ -250,17 +269,11 @@ class VirxERLU(BaseAgent):
                 else:
                     self.debug = [[], []]
 
-                # run the routine on the end of the stack
-                if not self.is_clear():
-                    self.stack[-1].run(self)
-
-                if self.is_clear() or self.stack[0].__class__.__name__ not in {'Aerial', 'jump_shot', 'block_ground_shot', 'double_jump'}:
-                    self.shooting = False
-
             return SimpleControllerState() if self.disable_driving else self.controller
         except Exception:
-            print(self.name)
-            print_exc()
+            t_file = os.path.join(self.traceback_file[0], "VirxERLU"+self.traceback_file[1])
+            print(f"ERROR with VirxERLU in {self.name}; see '{t_file}' and please report the bug at 'https://github.com/VirxEC/VirxERLU/issues'")
+            print_exc(file=open(t_file, "a"))
             return SimpleControllerState()
 
     def handle_match_comm(self, msg):
@@ -359,6 +372,9 @@ class hitbox_object:
 
     def __getitem__(self, index):
         return (self.length, self.width, self.height)[index]
+
+    def tuple(self):
+    	return (self.length, self.width, self.height)
 
 
 class ball_object:
@@ -601,3 +617,7 @@ class Vector:
     def cap(self, low: float, high: float) -> Vector:
         # Caps all values in a Vector between 'low' and 'high'
         return Vector(*(max(min(item, high), low) for item in self.tuple()))
+
+    def midpoint(self, value: Vector) -> Vector:
+        # Midpoint of the 2 vectors
+        return (self + value) / 2

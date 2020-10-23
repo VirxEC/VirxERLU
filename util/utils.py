@@ -1,6 +1,6 @@
 from queue import Full
 
-from util.agent import math, Vector
+from util.agent import Vector, math
 
 
 def backsolve(target, car, time, gravity):
@@ -17,10 +17,12 @@ def cap(x, low, high):
     return max(min(x, high), low)
 
 
-def defaultPD(agent, local_target, upside_down=False):
+def defaultPD(agent, local_target, upside_down=False, up=None):
     # points the car towards a given local target.
     # Direction can be changed to allow the car to steer towards a target while driving backwards
-    up = agent.me.local(Vector(z=-1 if upside_down else 1))  # where "up" is in local coordinates
+
+    if up is None:
+        up = agent.me.local(Vector(z=-1 if upside_down else 1))  # where "up" is in local coordinates
     target_angles = (
         math.atan2(local_target.z, local_target.x),  # angle required to pitch towards target
         math.atan2(local_target.y, local_target.x),  # angle required to yaw towards target
@@ -35,13 +37,38 @@ def defaultPD(agent, local_target, upside_down=False):
     return target_angles
 
 
-def defaultThrottle(agent, target_speed):
+def defaultThrottle(agent, target_speed, target_angles=None):
     # accelerates the car to a desired speed using throttle and boost
     car_speed = agent.me.local_velocity().x
     t = target_speed - car_speed
-    agent.controller.throttle = cap((t**2) * sign(t)/1000, -1, 1)
-    agent.controller.boost = (t > 150 or (target_speed > 1400 and t > agent.boost_accel / 30)) and agent.controller.throttle == 1 and (agent.me.airborne or (abs(agent.controller.steer) < 0.25 and not agent.me.airborne))
+
+    if not agent.me.airborne:
+        angle_to_target = abs(target_angles[1])
+        if target_angles is not None:
+            agent.controller.handbrake = not agent.me.airborne and ((angle_to_target > 1.54) if sign(car_speed) == 1 else (angle_to_target < 1.6)) and agent.me.velocity.magnitude() > 150
+
+        if agent.controller.handbrake:
+            if car_speed < 900:
+                agent.controller.throttle = sign(t)
+                agent.controller.steer = sign(agent.controller.steer)
+            else:
+                agent.controller.throttle = -sign(car_speed)
+                agent.controller.handbrake = False
+        else:
+            agent.controller.throttle = cap((t**2) * sign(t)/1000, -1, 1)
+            agent.controller.boost = (t > 150 or (target_speed > 1400 and t > agent.boost_accel / 30)) and agent.controller.throttle > 0.9 and angle_to_target < 0.5
+
     return car_speed
+
+
+def defaultDrive(agent, target_speed, local_target):
+    if target_speed < 0:
+        local_target *= -1
+
+    target_angles = defaultPD(agent, local_target)
+    velocity = defaultThrottle(agent, target_speed, target_angles)
+
+    return target_angles, velocity
 
 
 def in_field(point, radius):
@@ -90,43 +117,15 @@ def quadratic(a, b, c):
     if a == 0:
         return -1, -1
 
-    return (-b + inside)/(2*a), (-b - inside)/(2*a)
+    b = -b
+    a = 2*a
 
-
-def shot_valid(agent, shot, target=None):
-    # Returns True if the ball is still where the shot anticipates it to be
-    if target is None:
-        target = shot.ball_location
-
-    threshold = agent.best_shot_value * 2
-
-    # First finds the two closest slices in the ball prediction to shot's intercept_time
-    # threshold controls the tolerance we allow the ball to be off by
-    slices = agent.ball_prediction_struct.slices
-    soonest = 0
-    latest = len(slices)-1
-    while len(slices[soonest:latest+1]) > 2:
-        midpoint = (soonest+latest) // 2
-        if slices[midpoint].game_seconds > shot.intercept_time:
-            latest = midpoint
-        else:
-            soonest = midpoint
-    # preparing to interpolate between the selected slices
-    dt = slices[latest].game_seconds - slices[soonest].game_seconds
-    time_from_soonest = shot.intercept_time - slices[soonest].game_seconds
-    soonest = (slices[soonest].physics.location.x, slices[soonest].physics.location.y, slices[soonest].physics.location.z)
-    slopes = (Vector(slices[latest].physics.location.x, slices[latest].physics.location.y, slices[latest].physics.location.z) - Vector(*soonest)) * (1/dt)
-    # Determining exactly where the ball will be at the given shot's intercept_time
-    predicted_ball_location = Vector(*soonest) + (slopes * time_from_soonest)
-    # Comparing predicted location with where the shot expects the ball to be
-    return target.dist(predicted_ball_location) < threshold
+    return (b + inside)/a, (b - inside)/a
 
 
 def side(x):
     # returns -1 for blue team and 1 for orange team
-    if x == 0:
-        return -1
-    return 1
+    return (-1, 1)[x]
 
 
 def sign(x):
@@ -156,7 +155,7 @@ def invlerp(a, b, v):
     # Inverse linear interpolation from a to b with value v
     # For instance, it returns 0 if v is a, and returns 1 if v is b, and returns 0.5 if v is exactly between a and b
     # Works for both numbers and Vectors
-    return (v - a)/(b - a)
+    return (v - a) / (b - a)
 
 
 def send_comm(agent, msg):
@@ -167,7 +166,7 @@ def send_comm(agent, msg):
     msg.update(message)
     try:
         agent.matchcomms.outgoing_broadcast.put_nowait({
-            "VirxEB": msg
+            "VirxERLU": msg
         })
     except Full:
         agent.print("Outgoing broadcast is full; couldn't send message")
@@ -182,18 +181,3 @@ def peek_generator(generator):
 
 def almost_equals(x, y, threshold):
     return x - threshold < y and y < x + threshold
-
-
-def point_inside_quadrilateral_2d(point, quadrilateral):
-    # Point is a 2d vector
-    # Quadrilateral is a tuple of 4 2d vectors, in either a clockwise or counter-clockwise order
-    # See https://stackoverflow.com/a/16260220/10930209 for an explanation
-
-    def area_of_triangle(triangle):
-        return abs(sum((triangle[0].x * (triangle[1].y - triangle[2].y), triangle[1].x * (triangle[2].y - triangle[0].y), triangle[2].x * (triangle[0].y - triangle[1].y))) / 2)
-
-    actual_area = area_of_triangle((quadrilateral[0], quadrilateral[1], point)) + area_of_triangle((quadrilateral[2], quadrilateral[1], point)) + area_of_triangle((quadrilateral[2], quadrilateral[3], point)) + area_of_triangle((quadrilateral[0], quadrilateral[3], point))
-    quadrilateral_area = area_of_triangle((quadrilateral[0], quadrilateral[2], quadrilateral[1])) + area_of_triangle((quadrilateral[0], quadrilateral[2], quadrilateral[3]))
-
-    # This is to account for any floating point errors
-    return almost_equals(actual_area, quadrilateral_area, 0.001)
