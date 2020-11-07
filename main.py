@@ -6,6 +6,7 @@ class Bot(VirxERLU):
     # If your bot encounters an error, VirxERLU will do it's best to keep your bot from crashing.
     # VirxERLU uses a stack system for it's routines. A stack is a first-in, last-out system. The stack is a list of routines.
     # VirxERLU on VirxEC Showcase -> https://virxerlu.virxcase.dev/
+    # Questions? Join my Discord -> https://discord.gg/5ARzYRD2Na
     # Wiki -> https://github.com/VirxEC/VirxERLU/wiki
     def init(self):
         # This is a shot between the opponent's goal posts
