@@ -4,6 +4,7 @@ Big thanks to ddthj/GoslingUtils for the basis of VirxERLU. This version, howeve
 
 + [RLBot](http://www.rlbot.org/)
 + [VirxERLU Wiki](https://github.com/VirxEC/VirxERLU/wiki)
++ [VirxEC Discord](https://discord.gg/5ARzYRD2Na) - Ask your questions here!
 + [RLBot Wiki](https://github.com/RLBot/RLBot/wiki)
 + [RLBot Discord](https://discord.gg/rlbot)
 + [RLBot Youtube](https://www.youtube.com/channel/UCu8scB_k94Kh-iO979QTDJA)
