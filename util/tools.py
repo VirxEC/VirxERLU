@@ -257,18 +257,4 @@ def get_slices(agent, cap_, weight=None, start_slice=12):
         # Start 0.2 seconds in, and skip every other slice
         slices = struct.slices[start_slice:end_slice:2]
 
-    # get the number of slices
-    s_len = len(slices)
-
-    # find what's exactly 1 quarter of the total slices
-    quart = s_len / 4
-
-    # get the integer 1 quarter and 3 quarter slices
-    main_s = (math.ceil(quart), math.floor(quart * 3))
-
-    # search the middle half, then the first quarter, then the last quarter
-    main = slices[main_s[0]:main_s[1]]
-    main += slices[:main_s[0]]
-    main += slices[main_s[1]:]
-
     return main
