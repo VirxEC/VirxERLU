@@ -257,4 +257,4 @@ def get_slices(agent, cap_, weight=None, start_slice=12):
         # Start 0.2 seconds in, and skip every other slice
         slices = struct.slices[start_slice:end_slice:2]
 
-    return main
+    return slices

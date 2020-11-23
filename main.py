@@ -3,103 +3,124 @@ from util.agent import Vector, VirxERLU
 
 
 class Bot(VirxERLU):
-    # If your bot encounters an error, VirxERLU will do it's best to keep your bot from crashing.
-    # VirxERLU uses a stack system for it's routines. A stack is a first-in, last-out system. The stack is a list of routines.
+    # If the bot encounters an error, VirxERLU will do it's best to keep the bot from crashing.
+    # VirxERLU uses a stack system for it's routines. A stack is a first-in, last-out system of routines.
     # VirxERLU on VirxEC Showcase -> https://virxerlu.virxcase.dev/
     # Questions? Want to be notified about VirxERLU updates? Join my Discord -> https://discord.gg/5ARzYRD2Na
     # Wiki -> https://github.com/VirxEC/VirxERLU/wiki
     def init(self):
+        # NOTE This method is ran only once, and it's when the bot starts up
+
         # This is a shot between the opponent's goal posts
         # NOTE When creating these, it must be a tuple of (left_target, right_target)
         self.foe_goal_shot = (self.foe_goal.left_post, self.foe_goal.right_post)
+        # NOTE If you want to shoot the ball anywhere BUT between to targets, then make a tuple like (right_target, left_target) - I call this an anti-target
 
     def run(self):
-        # If the stack is clear
-        if self.is_clear():
-            # If the kickoff is done
-            if self.kickoff_done:
-                # If we have more than 36 boost
-                if self.me.boost >= 36:
-                    shot = None
-                    # If the ball is on the enemy's side of the field, or slightly on our side
-                    if self.ball.location.y * utils.side(self.team) < 640:
-                        # Find a shot on target - disable double_jump, jump_shot, and ground_shot if we're airborne
-                        shot = tools.find_shot(self, self.foe_goal_shot, can_double_jump=not self.me.airborne, can_jump=not self.me.airborne, can_ground=not self.me.airborne)
+        # NOTE This method is ran every tick
 
-                    # If we're behind the ball and we couldn't find a shot on target
-                    if shot is None and self.ball.location.y * utils.side(self.team) < self.me.location.y * utils.side(self.team):
-                        # Find any shot - disable double_jump, jump_shot, and ground_shot if we're airborne
-                        shot = tools.find_any_shot(self, can_double_jump=not self.me.airborne, can_jump=not self.me.airborne, can_ground=not self.me.airborne)
-
-                    # If we found a shot
-                    if shot is not None:
-                        # Shoot
-                        self.push(shot)
-                    # If ball is in our half
-                    elif self.ball.location.y * utils.side(self.team) > 640:
-                        # Retreat back to the net
-                        self.push(routines.retreat())
-                    # If the ball isn't in our half
-                    else:
-                        # Shadow
-                        self.push(routines.shadow())
-                # If we have less than 36 boost
-                else:
-                    # Get a list of all of the large, active boosts
-                    boosts = (boost for boost in self.boosts if boost.active and boost.large)
-                    # Get the closest
-                    closest_boost = min(boosts, key=lambda boost: boost.location.dist(self.me.location))
-                    # Goto the nearest boost
-                    self.push(routines.goto_boost(closest_boost))
-            # If the kickoff isn't done
-            else:
+        # If the kickoff isn't done
+        if not self.kickoff_done:
+            # If the stack is clear
+            if self.is_clear():
                 # Push a generic kickoff to the stack
+                # TODO make kickoff routines for each of the 5 kickoffs positions
                 self.push(routines.generic_kickoff())
-        # If we're shooting (and we want to run this at 30tps)
-        elif self.shooting and self.odd_tick == 0:
+
+            # we don't want to do anything else during our kickoff
+            return
+
+        # If we have less than 36 boost and the stack is clear
+        # TODO this bot will go for boost no matter what - this is AWFUL, especially in a 1v1!
+        if self.me.boost < 36 and self.is_clear():
+            # Get a list of all of the large, active boosts
+            boosts = tuple(boost for boost in self.boosts if boost.active and boost.large)
+            # Get the closest boost
+            closest_boost = min(boosts, key=lambda boost: boost.location.dist(self.me.location))
+            # Goto the nearest boost
+            self.push(routines.goto_boost(closest_boost))
+
+            # we've made our decision and we don't want to run anything else
+            return
+
+        # if the stack is clear, then run the following - otherwise, if the stack isn't empty, then look for a shot every 4th tick while the other routine is running
+        if self.is_clear() or self.odd_tick == 0:
             shot = None
+            can_drive = not self.me.airborne
+
+            # TODO we might miss the net, even when using a target - make a pair of targets that are small than the goal so we have a better chance of scoring!
             # If the ball is on the enemy's side of the field, or slightly on our side
             if self.ball.location.y * utils.side(self.team) < 640:
-                # Find a shot on target that's faster than our current shot - disable double_jump, jump_shot, and ground_shot if we're airborne
-                shot = tools.find_shot(self, self.foe_goal_shot, can_double_jump=not self.me.airborne, can_jump=not self.me.airborne, can_ground=not self.me.airborne)
+                # Find a shot on target - disable double_jump, jump_shot, and ground_shot if we're airborne
+                # RLBot's ball prediction is 60hz and goes 6 seconds into the future - we'll set the max seconds to search to 6, here
+                shot = tools.find_shot(self, self.foe_goal_shot, can_double_jump=can_drive, can_jump=can_drive, can_ground=can_drive, cap_=6)
 
+            # TODO Using an anti-target here could be cool - do to this, pass in a target tuple that's (right_target, left_target) (instead of (left, right)) into tools.find_shot (NOT tools.find_any_shot)
+            # TODO When possible, we might want to take a little bit more time to shot the ball anywhere in the opponent's end - this target should probably be REALLY LONG AND HIGH!
             # If we're behind the ball and we couldn't find a shot on target
-            if shot is None and not self.shooting and self.ball.location.y * utils.side(self.team) < self.me.location.y * utils.side(self.team):
-                # Find any shot - disable double_jump, jump_shot, and ground_shot if we're airborne
-                shot = tools.find_any_shot(self, can_double_jump=not self.me.airborne, can_jump=not self.me.airborne, can_ground=not self.me.airborne)
+            if shot is None and self.ball.location.y * utils.side(self.team) < self.me.location.y * utils.side(self.team):
+                # Find a shot, but without a target - disable double_jump, jump_shot, and ground_shot if we're airborne
+                # RLBot's ball prediction is 60hz and goes 6 seconds into the future - we'll set the max seconds to search to 4, here
+                shot = tools.find_any_shot(self, can_double_jump=can_drive, can_jump=can_drive, can_ground=can_drive, cap_=4)
 
             # If we found a shot
             if shot is not None:
-                # Get the current shot's name (ex jump_shot, double_jump or Aerial)
-                current_shot_name = self.stack[0].__class__.__name__
-                # Get the new shot's name
-                new_shot_name = shot.__class__.__name__
-
-                # If the shots are the same type
-                if new_shot_name is current_shot_name:
-                    # Update the existing shot with the new information
-                    self.stack[0].update(shot)
-                # If the shots are of different types
-                else:
-                    # Clear the stack
-                    self.clear()
+                # If the stack is clear
+                if self.is_clear():
                     # Shoot
                     self.push(shot)
+                # If the stack isn't clear
+                else:
+                    # Get the current shot's name (ex jump_shot, double_jump, ground_shot or Aerial) as a string
+                    current_shot_name = self.stack[0].__class__.__name__
+                    # Get the new shot's name as a string
+                    new_shot_name = shot.__class__.__name__
+
+                    # If the shots are the same type
+                    if new_shot_name is current_shot_name:
+                        # Update the existing shot with the new information
+                        self.stack[0].update(shot)
+                    # If the shots are of different types
+                    else:
+                        # Clear the stack
+                        self.clear()
+                        # Shoot
+                        self.push(shot)
+
+                # we've made our decision and we don't want to run anything else
+                return
+
+        # TODO this setup is far from ideal - a custom shadow/retreat routine is probably best for the bot...
+        # Make sure to put custom routines in a separate file from VirxERLU routines, so you can easily update VirxERLU to newer versions.
+        # If the stack is still clear
+        if self.is_clear():
+            # If ball is in our half
+            if self.ball.location.y * utils.side(self.team) > 640:
+                # Retreat back to the net
+                self.push(routines.retreat())
+            # If the ball isn't in our half
+            else:
+                # Shadow
+                self.push(routines.shadow())
 
     def demolished(self):
+        # NOTE This method is ran every tick that your bot it demolished
+
         # If the stack isn't clear
         if not self.is_clear():
             # Clear the stack
             self.clear()
 
     def handle_match_comm(self, msg):
-        # This is for handling any incoming match communications
+        # NOTE This is for handling any incoming match communications
+
         # All match comms are Python objects
         if msg.get('team') is self.team:
             self.print(msg)
 
     def handle_quick_chat(self, index, team, quick_chat):
-        # This is for handling any incoming quick chats
+        # NOTE This is for handling any incoming quick chats
+
         # See https://github.com/RLBot/RLBot/blob/master/src/main/flatbuffers/rlbot.fbs#L376 for a list of all quick chats
         if self.team is team:
             self.print(quick_chat)
