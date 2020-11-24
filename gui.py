@@ -66,7 +66,7 @@ class Gui(Thread):
         def set_show_coords():
             self.agent.show_coords = show_coords_bool.get()
 
-        show_coords_btn = ttk.Checkbutton(root, text='Show Location (2D)', variable=show_coords_bool, command=set_show_coords)
+        show_coords_btn = ttk.Checkbutton(root, text='Show Car Info (2D/Lines)', variable=show_coords_bool, command=set_show_coords)
         show_coords_btn.pack()
 
         # Debug 3D

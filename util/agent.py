@@ -3,12 +3,12 @@ from __future__ import annotations
 import itertools
 import math
 import os
-from dataclasses import dataclass
 from datetime import datetime
 from time import time_ns
 from traceback import print_exc
 from typing import List, Tuple
 
+import numpy as np
 from gui import Gui
 from match_comms import MatchComms
 from rlbot.agents.base_agent import BaseAgent, SimpleControllerState
@@ -103,7 +103,7 @@ class VirxERLU(BaseAgent):
         self.kickoff_flag = False
         self.kickoff_done = True
         self.shooting = False
-        self.best_shot_value = 92
+        self.best_shot_value = 92.75
         self.odd_tick = -1
 
         self.future_ball_location_slice = 180
@@ -127,9 +127,6 @@ class VirxERLU(BaseAgent):
         self.boosts = tuple(boost_object(i, boost.location, boost.is_full_boost) for i, boost in enumerate(field_info.boost_pads))
         self.refresh_player_lists(packet)
         self.ball.update(packet)
-
-        self.best_shot_value = math.floor((92.75 + self.me.hitbox.width / 2))
-        self.print(f"Best shot value: {self.best_shot_value}")
 
         self.init()
 
@@ -160,6 +157,26 @@ class VirxERLU(BaseAgent):
             color = color if color is not None else self.renderer.grey()
             vectors = tuple(vector.copy() for vector in vectors)
             self.renderer.draw_polyline_3d(vectors, self.renderer.create_color(255, *color) if type(color) in {list, tuple} else color)
+
+    def sphere(self, location, radius, color=None):
+        if self.debugging and self.debug_lines:
+            x = Vector(x=radius)
+            y = Vector(y=radius)
+            z = Vector(z=radius)
+
+            diag = Vector(1.0, 1.0, 1.0).scale(radius).x
+            d1 = Vector(diag, diag, diag)
+            d2 = Vector(-diag, diag, diag)
+            d3 = Vector(-diag, -diag, diag)
+            d4 = Vector(-diag, diag, -diag)
+
+            self.line(location - x, location + x, color)
+            self.line(location - y, location + y, color)
+            self.line(location - z, location + z, color)
+            self.line(location - d1, location + d1, color)
+            self.line(location - d2, location + d2, color)
+            self.line(location - d3, location + d3, color)
+            self.line(location - d4, location + d4, color)
 
     def print(self, item):
         if not self.tournament:
@@ -225,6 +242,12 @@ class VirxERLU(BaseAgent):
                 if not self.is_clear():
                     self.clear()
             elif self.game.round_active:
+                stack_routine_name = '' if self.is_clear() else self.stack[0].__class__.__name__
+                if stack_routine_name in {'Aerial', 'jump_shot', 'double_jump', 'ground_shot', 'short_shot'}:
+                    self.shooting = True
+                else:
+                    self.shooting = False
+
                 try:
                     self.run()  # Run strategy code; This is a very expensive function to run
                 except Exception:
@@ -242,22 +265,42 @@ class VirxERLU(BaseAgent):
                         print(f"ERROR in {self.name}'s {r_name} routine; see '{t_file}'")
                         print_exc(file=open(t_file, "a"))
 
-                if self.is_clear() or self.stack[0].__class__.__name__ not in {'Aerial', 'jump_shot', 'block_ground_shot', 'double_jump'}:
-                    self.shooting = False
-
                 if self.debugging:
                     if self.debug_3d_bool:
                         if self.debug_stack_bool:
                             self.debug[0] = itertools.chain(self.debug[0], ("STACK:",), (item.__class__.__name__ for item in reversed(self.stack)))
 
-                        self.renderer.draw_string_3d(self.me.location.tuple(), 2, 2, "\n".join(self.debug[0]), self.renderer.team_color(alt_color=True))
+                        self.renderer.draw_string_3d(tuple(self.me.location), 2, 2, "\n".join(self.debug[0]), self.renderer.team_color(alt_color=True))
 
                         self.debug[0] = []
 
-                    if self.debug_2d_bool:
-                        if self.show_coords:
-                            self.debug[1].insert(0, str(self.me.location.int()))
+                    if self.show_coords:
+                        self.debug[1].insert(0, f"Hitbox: [{self.me.hitbox.length} {self.me.hitbox.width} {self.me.hitbox.height}]")
+                        self.debug[1].insert(0, f"Location: {round(self.me.location)}")
 
+                        car = self.me
+                        center = car.local(car.hitbox.offset) + car.location
+                        top = car.up * (car.hitbox.height / 2)
+                        front = car.forward * (car.hitbox.length / 2)
+                        left = car.left * (car.hitbox.width / 2)
+
+                        bottom_front_right = center - top + front - left
+                        bottom_front_left = center - top + front + left
+                        bottom_back_right = center - top - front - left
+                        bottom_back_left = center - top - front + left
+                        top_front_right = center + top + front - left
+                        top_front_left = center + top + front + left
+                        top_back_right = center + top - front - left
+                        top_back_left = center + top - front + left
+
+                        hitbox_color = self.renderer.team_color(alt_color=True)
+
+                        self.polyline((top_back_left, top_front_left, top_front_right, bottom_front_right, bottom_front_left, top_front_left), hitbox_color)
+                        self.polyline((bottom_front_left, bottom_back_left, bottom_back_right, top_back_right, top_back_left, bottom_back_left), hitbox_color)
+                        self.line(bottom_back_right, bottom_front_right, hitbox_color)
+                        self.line(top_back_right, top_front_right, hitbox_color)
+
+                    if self.debug_2d_bool:
                         if not self.is_clear() and self.stack[0].__class__.__name__ in {'Aerial', 'jump_shot', 'ground_shot', 'double_jump'}:
                             self.dbg_2d(round(self.stack[0].intercept_time - self.time, 4))
 
@@ -307,12 +350,12 @@ class car_object:
 
         if packet is not None:
             car = packet.game_cars[self.index]
-            self.hitbox = hitbox_object(car.hitbox.length, car.hitbox.width, car.hitbox.height)
-            self.offset = Vector(car.hitbox_offset.x, car.hitbox_offset.y, car.hitbox_offset.z)
+            self.hitbox = hitbox_object(car.hitbox.length, car.hitbox.width, car.hitbox.height, Vector(car.hitbox_offset.x, car.hitbox_offset.y, car.hitbox_offset.z))
+            self.offset = self.hitbox.offset  # please use self.hitbox.offset and not self.offset
             self.update(packet)
         else:
             self.hitbox = hitbox_object()
-            self.offset = Vector()
+            self.offset = self.hitbox.offset
 
     def local(self, value):
         # Generic localization
@@ -321,7 +364,7 @@ class car_object:
     def local_velocity(self, velocity=None):
         # Returns the velocity of an item relative to the car
         # x is the velocity forwards (+) or backwards (-)
-        # y is the velocity to the left (-) or right (+)
+        # y is the velocity to the left (+) or right (-)
         # z if the velocity upwards (+) or downwards (-)
         if velocity is None:
             velocity = self.velocity
@@ -331,16 +374,34 @@ class car_object:
     def local_location(self, location):
         # Returns the location of an item relative to the car
         # x is how far the location is forwards (+) or backwards (-)
-        # y is how far the location is to the left (-) or right (+)
+        # y is the velocity to the left (+) or right (-)
         # z is how far the location is upwards (+) or downwards (-)
         return self.local(location - self.location)
 
+    def get_raw(self, agent, force_on_ground=False):
+        return (
+            tuple(self.location),
+            tuple(self.velocity),
+            (tuple(self.forward), tuple(self.left), tuple(self.up)),
+            tuple(self.angular_velocity),
+            1 if self.demolished else 0,
+            1 if self.airborne and not force_on_ground else 0,
+            1 if self.supersonic else 0,
+            1 if self.jumped else 0,
+            1 if self.doublejumped else 0,
+            self.boost if agent.boost_amount != 'unlimited' else 255,
+            self.index,
+            tuple(self.hitbox),
+            tuple(self.hitbox.offset)
+        )
+
     def update(self, packet):
         car = packet.game_cars[self.index]
-        self.location = Vector(car.physics.location.x, car.physics.location.y, car.physics.location.z)
-        self.velocity = Vector(car.physics.velocity.x, car.physics.velocity.y, car.physics.velocity.z)
-        self.orientation = Matrix3(car.physics.rotation.pitch, car.physics.rotation.yaw, car.physics.rotation.roll)
-        self.angular_velocity = self.orientation.dot(car.physics.angular_velocity)
+        car_phy = car.physics
+        self.location = Vector(car_phy.location.x, car_phy.location.y, car_phy.location.z)
+        self.velocity = Vector(car_phy.velocity.x, car_phy.velocity.y, car_phy.velocity.z)
+        self.orientation = Matrix3(car_phy.rotation.pitch, car_phy.rotation.yaw, car_phy.rotation.roll)
+        self.angular_velocity = self.orientation.dot((car_phy.angular_velocity.x, car_phy.angular_velocity.y, car_phy.angular_velocity.z))
         self.demolished = car.is_demolished
         self.airborne = not car.has_wheel_contact
         self.supersonic = car.is_super_sonic
@@ -365,16 +426,17 @@ class car_object:
 
 
 class hitbox_object:
-    def __init__(self, length=0, width=0, height=0):
+    def __init__(self, length=0, width=0, height=0, offset=None):
         self.length = length
         self.width = width
         self.height = height
 
+        if offset is None:
+            offset = Vector()
+        self.offset = offset
+
     def __getitem__(self, index):
         return (self.length, self.width, self.height)[index]
-
-    def tuple(self):
-    	return (self.length, self.width, self.height)
 
 
 class ball_object:
@@ -383,6 +445,12 @@ class ball_object:
         self.velocity = Vector()
         self.latest_touched_time = 0
         self.latest_touched_team = 0
+
+    def get_raw(self):
+        return (
+            tuple(self.location),
+            tuple(self.velocity)
+        )
 
     def update(self, packet):
         ball = packet.game_ball
@@ -407,10 +475,10 @@ class goal_object:
     # This is a simple object that creates/holds goalpost locations for a given team (for soccer on standard maps only)
     def __init__(self, team):
         team = 1 if team == 1 else -1
-        self.location = Vector(0, team * 5120, 320)  # center of goal line
+        self.location = Vector(0, team * 5120, 321.3875)  # center of goal line
         # Posts are closer to x=893, but this allows the bot to be a little more accurate
-        self.left_post = Vector(team * 800, team * 5125, 320)
-        self.right_post = Vector(-team * 800, team * 5125, 320)
+        self.left_post = Vector(team * 800, team * 5120, 321.3875)
+        self.right_post = Vector(-team * 800, team * 5120, 321.3875)
 
 
 class game_object:
@@ -463,117 +531,159 @@ class Matrix3:
     def __getitem__(self, key):
         return self.data[key]
 
+    def __str__(self):
+        return f"[{self.forward}\n{self.left}\n{self.up}]"
+
     def dot(self, vector):
         return Vector(self.forward.dot(vector), self.left.dot(vector), self.up.dot(vector))
 
+    def det(self):
+        return self[0][0] * self[1][1] * self[2][2] + self[0][1] * self[1][2] * self[2][0] + \
+               self[0][2] * self[1][0] * self[2][1] - self[0][0] * self[1][2] * self[2][1] - \
+               self[0][1] * self[1][0] * self[2][2] - self[0][2] * self[1][1] * self[2][0]
 
-# With this new setup, Vector supports 1D, 2D and 3D Vectors, as well as calculations between them
-@dataclass
+
+# Vector supports 1D, 2D and 3D Vectors, as well as calculations between them
+# Arithmetic with 1D and 2D lists/tuples aren't supported - just set the remaining values to 0 manually
+# With this new setup, Vector is much faster because it's just a wrapper for numpy
 class Vector:
-    # These values can be ints or floats, with their defaults being 0
-    # This means that Vector3(0, 0, 0) is now Vector()
-    x: float = 0
-    y: float = 0
-    z: float = 0
+    def __init__(self, x: float = 0, y: float = 0, z: float = 0):
+        # this is a private property - this is so all other things treat this class like a list, and so should you!
+        self._np = np.array([x, y, z])
 
+    def __getitem__(self, index):
+        return self._np[index].item()
+
+    def __setitem__(self, index, value):
+        self._np[index] = value
+
+    @property
+    def x(self):
+        return self._np[0].item()
+
+    @x.setter
+    def x(self, value):
+        self._np[0] = value
+
+    @property
+    def y(self):
+        return self._np[1].item()
+
+    @y.setter
+    def y(self, value):
+        self._np[1] = value
+
+    @property
+    def z(self):
+        return self._np[2].item()
+
+    @z.setter
+    def z(self, value):
+        self._np[2] = value
+
+    # self == value
     def __eq__(self, value):
-        # Vector's can be compared with:
-        # - Another Vector, in which case True will be returned if they have the same values
-        # - A list/tuple, in which case True will be returned if they have the same values
-        # - A single value, in which case True will be returned if the Vector's length matches the value
-        if hasattr(value, "x"):
-            return self.tuple() == (value.x, value.y, value.z)
+        if isinstance(value, float) or isinstance(value, int):
+            return self.magnitude() == value
 
-        if isinstance(value, tuple):
-            return self.tuple() == value
+        if hasattr(value, "_np"):
+            value = value._np
+        return (self._np == value).all()
 
-        if isinstance(value, list):
-            return self.list() == value
-
-        return self.magnitude() == value
-
-    def __getitem__(self, value):
-        return self.tuple()[value]
-
+    # str(self)
     def __str__(self):
         # Vector's can be printed to console
-        return f"({self.x}, {self.y}, {self.z})"
+        return f"[{self.x} {self.y} {self.z}]"
 
+    # repr(self)
+    def __repr__(self):
+        return f"Vector(x={self.x}, y={self.y}, z={self.z})"
+
+    # -self
+    def __neg__(self):
+        return Vector(*(self._np * -1))
+
+    # self + value
     def __add__(self, value):
-        if hasattr(value, "x"):
-            return Vector(self.x+value.x, self.y+value.y, self.z+value.z)
-        return Vector(self.x+value, self.y+value, self.z+value)
+        if hasattr(value, "_np"):
+            value = value._np
+        return Vector(*(self._np+value))
     __radd__ = __add__
 
+    # self - value
     def __sub__(self, value):
-        if hasattr(value, "x"):
-            return Vector(self.x-value.x, self.y-value.y, self.z-value.z)
-        return Vector(self.x-value, self.y-value, self.z-value)
-    __rsub__ = __sub__
+        if hasattr(value, "_np"):
+            value = value._np
+        return Vector(*(self._np-value))
 
-    def __neg__(self):
-        return Vector(-self.x, -self.y, -self.z)
+    def __rsub__(self, value):
+        return -self + value
 
+    # self * value
     def __mul__(self, value):
-        if hasattr(value, "x"):
-            return Vector(self.x*value.x, self.y*value.y, self.z*value.z)
-        return Vector(self.x*value, self.y*value, self.z*value)
+        if hasattr(value, "_np"):
+            value = value._np
+        return Vector(*(self._np*value))
     __rmul__ = __mul__
 
+    # self / value
     def __truediv__(self, value):
-        if hasattr(value, "x"):
-            return Vector(self.x/value.x, self.y/value.y, self.z/value.z)
-        return Vector(self.x/value, self.y/value, self.z/value)
-    __rtruediv__ = __truediv__
+        if hasattr(value, "_np"):
+            value = value._np
+        return Vector(*(self._np/value))
 
-    def int(self) -> Vector:
-        return Vector(int(self.x), int(self.y), int(self.z))
+    def __rtruediv__(self, value):
+        return self * (1 / value)
 
-    def tuple(self) -> Tuple[float]:
-        return (self.x, self.y, self.z)
-
-    def list(self) -> List[float]:
-        return [self.x, self.y, self.z]
-
-    # Linear algebra functions
+    # round(self)
+    def __round__(self, decimals=0) -> Vector:
+        # Rounds all of the values
+        return Vector(*np.around(self._np, decimals=decimals))
 
     def magnitude(self) -> float:
-        # Magnitude() returns the length of the vector
-        return math.sqrt(self.dot(self))
+        # Returns the length of the vector
+        return np.linalg.norm(self._np).item()
+
+    def dot(self, value: Vector) -> float:
+        # Returns the dot product of two vectors
+        if hasattr(value, "_np"):
+            value = value._np
+        return np.dot(self._np, value).item()
+
+    def cross(self, value: Vector) -> Vector:
+        # Returns the cross product of two vectors
+        if hasattr(value, "_np"):
+            value = value._np
+        return Vector(*np.cross(self._np, value))
+
+    def copy(self) -> Vector:
+        # Returns a copy of the vector
+        return Vector(*self._np)
 
     def normalize(self, return_magnitude=False) -> List[Vector, float] or Vector:
-        # Normalize() returns a Vector that shares the same direction but has a length of 1
-        # Normalize(True) can also be used if you'd like the length of this Vector (used for optimization)
+        # normalize() returns a Vector that shares the same direction but has a length of 1
+        # normalize(True) can also be used if you'd like the length of this Vector (used for optimization)
         magnitude = self.magnitude()
         if magnitude != 0:
+            norm_vec = Vector(*(self._np / magnitude))
             if return_magnitude:
-                return Vector(self.x/magnitude, self.y/magnitude, self.z/magnitude), magnitude
-            return Vector(self.x/magnitude, self.y/magnitude, self.z/magnitude)
+                return norm_vec, magnitude
+            return norm_vec
         if return_magnitude:
             return Vector(), 0
         return Vector()
 
-    def dot(self, value: Vector) -> float:
-        return self.x*value.x + self.y*value.y + self.z*value.z
-
-    def cross(self, value: Vector) -> Vector:
-        return Vector((self.y*value.z) - (self.z*value.y), (self.z*value.x) - (self.x*value.z), (self.x*value.y) - (self.y*value.x))
-
     def flatten(self) -> Vector:
         # Sets Z (Vector[2]) to 0, making the Vector 2D
-        return Vector(self.x, self.y, 0)
-
-    def copy(self) -> Vector:
-        # Returns a copy of this Vector
-        return Vector(*self.tuple())
+        return Vector(self._np[0], self._np[1])
 
     def angle2D(self, value: Vector) -> float:
         # Returns the 2D angle between this Vector and another Vector in radians
         return self.flatten().angle(value.flatten())
 
-    def angle(self, value: Vector) -> Vector:
+    def angle(self, value: Vector) -> float:
         # Returns the angle between this Vector and another Vector in radians
-        return math.acos(max(min(self.normalize().dot(value.normalize()), 1), -1))
+        return math.acos(max(min(np.dot(self.normalize()._np, value.normalize()._np).item(), 1), -1))
 
     def rotate(self, angle: float) -> Vector:
         # Rotates this Vector by the given angle in radians
@@ -584,12 +694,12 @@ class Vector:
         # Similar to integer clamping, Vector's clamp2D() forces the Vector's direction between a start and end Vector
         # Such that Start < Vector < End in terms of clockwise rotation
         # Note that this is only 2D, in the x and y axis
-        s = self.normalize()
-        right = s.dot(end.cross(Vector(z=-1))) < 0
-        left = s.dot(start.cross(Vector(z=-1))) > 0
-        if (right and left) if end.dot(start.cross(Vector(z=-1))) > 0 else (right or left):
+        s = self.normalize()._np
+        right = np.dot(s, np.cross(end._np, (0, 0, -1))) < 0
+        left = np.dot(s, np.cross(start._np, (0, 0, -1))) > 0
+        if (right and left) if np.dot(end._np, np.cross(start._np, (0, 0, -1))) > 0 else (right or left):
             return self
-        if start.dot(s) < end.dot(s):
+        if np.dot(start._np, s) < np.dot(end._np, s):
             return end
         return start
 
@@ -608,7 +718,9 @@ class Vector:
 
     def dist(self, value: Vector) -> float:
         # Distance between 2 vectors
-        return (self - value).magnitude()
+        if hasattr(value, "_np"):
+            value = value._np
+        return np.linalg.norm(self._np - value).item()
 
     def flat_dist(self, value: Vector) -> float:
         # Distance between 2 vectors on a 2D plane
@@ -616,8 +728,14 @@ class Vector:
 
     def cap(self, low: float, high: float) -> Vector:
         # Caps all values in a Vector between 'low' and 'high'
-        return Vector(*(max(min(item, high), low) for item in self.tuple()))
+        return Vector(*(max(min(item, high), low) for item in self._np))
 
     def midpoint(self, value: Vector) -> Vector:
         # Midpoint of the 2 vectors
-        return (self + value) / 2
+        if hasattr(value, "_np"):
+            value = value._np
+        return Vector(*((self._np + value) / 2))
+
+    def scale(self, value: float) -> Vector:
+        # Returns a vector that has the same direction but with a value as the magnitude
+        return self.normalize() * value

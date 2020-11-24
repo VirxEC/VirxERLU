@@ -30,6 +30,14 @@ class Bot(VirxERLU):
             # we don't want to do anything else during our kickoff
             return
 
+        # If the stack if clear and we're in the air
+        if self.is_clear() and self.me.airborne:
+            # Recover - This routine supports floor, wall, and ceiling recoveries, as well as recovering towards a target
+            self.push(routines.recovery())
+
+            # we've made our decision and we don't want to run anything else
+            return
+
         # If we have less than 36 boost and the stack is clear
         # TODO this bot will go for boost no matter what - this is AWFUL, especially in a 1v1!
         if self.me.boost < 36 and self.is_clear():
@@ -96,12 +104,20 @@ class Bot(VirxERLU):
         if self.is_clear():
             # If ball is in our half
             if self.ball.location.y * utils.side(self.team) > 640:
-                # Retreat back to the net
-                self.push(routines.retreat())
+                retreat_routine = routines.retreat()
+                # Check if the retreat routine is viable
+                if retreat_routine.is_viable(self):
+                    # Retreat back to the net
+                    self.push(retreat_routine)
             # If the ball isn't in our half
             else:
-                # Shadow
-                self.push(routines.shadow())
+                shadow_routine = routines.shadow()
+                # Check if the shadow routine is viable
+                if shadow_routine.is_viable(self):
+                    # Shadow
+                    self.push(shadow_routine)
+
+        # If we get here, then we are doing our kickoff, nor can we shoot, nor can we retreat or shadow - so let's just wait!
 
     def demolished(self):
         # NOTE This method is ran every tick that your bot it demolished

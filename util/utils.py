@@ -1,20 +1,18 @@
 from queue import Full
 
-from util.agent import Vector, math
-
-
-def backsolve(target, car, time, gravity):
-    # Finds the acceleration required for a car to reach a target in a specific amount of time
-    d = target - car.location
-    dvx = ((d.x/time) - car.velocity.x) / time
-    dvy = ((d.y/time) - car.velocity.y) / time
-    dvz = (((d.z/time) - car.velocity.z) / time) - (gravity.z * time)
-    return Vector(dvx, dvy, dvz)
+from util.agent import math, Vector
 
 
 def cap(x, low, high):
     # caps/clamps a number between a low and high value
     return max(min(x, high), low)
+
+
+def cap_in_field(agent, target):
+    target.x = cap(target.x, -850, 850) if abs(agent.me.location.y) > 5120 - (agent.me.hitbox.length / 2) else cap(target.x, -4050, 4050)
+    target.y = cap(target.y, -5120, 5120)
+
+    return target
 
 
 def defaultPD(agent, local_target, upside_down=False, up=None):
@@ -37,38 +35,73 @@ def defaultPD(agent, local_target, upside_down=False, up=None):
     return target_angles
 
 
-def defaultThrottle(agent, target_speed, target_angles=None):
+def defaultThrottle(agent, target_speed, target_angles=None, local_target=None):
     # accelerates the car to a desired speed using throttle and boost
     car_speed = agent.me.local_velocity().x
-    t = target_speed - car_speed
 
     if not agent.me.airborne:
-        angle_to_target = abs(target_angles[1])
-        if target_angles is not None:
-            agent.controller.handbrake = not agent.me.airborne and ((angle_to_target > 1.54) if sign(car_speed) == 1 else (angle_to_target < 1.6)) and agent.me.velocity.magnitude() > 150
+        if target_angles is not None and local_target is not None:
+            turn_rad = turn_radius(abs(car_speed))
+            agent.controller.handbrake = not agent.me.airborne and agent.me.velocity.magnitude() > 150 and (is_inside_turn_radius(turn_rad, local_target, sign(agent.controller.steer)) if abs(local_target.y) < turn_rad else abs(local_target.x) < turn_rad)
 
+        angle_to_target = abs(target_angles[1])
         if agent.controller.handbrake:
-            if car_speed < 900:
-                agent.controller.throttle = sign(t)
+            if ((angle_to_target > 2.8) if sign(car_speed) == 1 else (angle_to_target < 0.34)):
+                if abs(target_speed) > 950: target_speed = 950 * sign(target_speed)
                 agent.controller.steer = sign(agent.controller.steer)
-            else:
-                agent.controller.throttle = -sign(car_speed)
                 agent.controller.handbrake = False
-        else:
-            agent.controller.throttle = cap((t**2) * sign(t)/1000, -1, 1)
-            agent.controller.boost = (t > 150 or (target_speed > 1400 and t > agent.boost_accel / 30)) and agent.controller.throttle > 0.9 and angle_to_target < 0.5
+            else:
+                agent.controller.steer = agent.controller.yaw
+
+        t = target_speed - car_speed
+        agent.controller.throttle = cap((t**2) * sign(t)/1000, -1, 1)
+
+        if not agent.controller.handbrake:
+            agent.controller.boost = (t > 150 or (target_speed > 1410 and t > agent.boost_accel / 30)) and agent.controller.throttle > 0.9 and angle_to_target < 0.5
 
     return car_speed
 
 
 def defaultDrive(agent, target_speed, local_target):
     if target_speed < 0:
-        local_target *= -1
+        local_target.y *= -1
 
     target_angles = defaultPD(agent, local_target)
-    velocity = defaultThrottle(agent, target_speed, target_angles)
+    if target_speed != 0:
+        velocity = defaultThrottle(agent, target_speed, target_angles, local_target)
 
     return target_angles, velocity
+
+
+def is_inside_turn_radius(turn_rad, local_target, steer_direction):
+    # turn_rad is the turn radius
+    local_target = local_target.flatten()
+    circle = Vector(y=-steer_direction * turn_rad)
+
+    return circle.dist(local_target) < turn_rad
+
+
+def turn_radius(v):
+    # v is the magnitude of the velocity in the car's forward direction
+    if v == 0:
+        return 0
+    return 1.0 / curvature(v)
+
+
+def curvature(v):
+    # v is the magnitude of the velocity in the car's forward direction
+    if 0 <= v < 500:
+        return 0.0069 - 5.84e-6 * v
+    elif 500 <= v < 1000:
+        return 0.00561 - 3.26e-6 * v
+    elif 1000 <= v < 1500:
+        return 0.0043 - 1.95e-6 * v
+    elif 1500 <= v < 1750:
+        return 0.003025 - 1.1e-6 * v
+    elif 1750 <= v < 2500:
+        return 0.0018 - 0.4e-6 * v
+    else:
+        return 0
 
 
 def in_field(point, radius):
@@ -89,20 +122,6 @@ def find_slope(shot_vector, car_to_target):
     except ZeroDivisionError:
         return 10*sign(d)
     return cap(f, -3, 3)
-
-
-def post_correction(ball_location, left_target, right_target):
-    # this function returns target locations that are corrected to account for the ball's radius
-    # If the left and right post swap sides, a goal cannot be scored
-    # We purposely make this a bit larger so that our shots have a higher chance of success
-    ball_radius = 120
-    goal_line_perp = (right_target - left_target).cross(Vector(z=1))
-    left = left_target + ((left_target - ball_location).normalize().cross(Vector(z=-1))*ball_radius)
-    right = right_target + ((right_target - ball_location).normalize().cross(Vector(z=1))*ball_radius)
-    left = left_target if (left-left_target).dot(goal_line_perp) > 0 else left
-    right = right_target if (right-right_target).dot(goal_line_perp) > 0 else right
-    swapped = (left - ball_location).normalize().cross(Vector(z=1)).dot((right - ball_location).normalize()) > -0.1
-    return left, right, swapped
 
 
 def quadratic(a, b, c):
@@ -181,3 +200,31 @@ def peek_generator(generator):
 
 def almost_equals(x, y, threshold):
     return x - threshold < y and y < x + threshold
+
+
+def point_inside_quadrilateral_2d(point, quadrilateral):
+    # Point is a 2d vector
+    # Quadrilateral is a tuple of 4 2d vectors, in either a clockwise or counter-clockwise order
+    # See https://stackoverflow.com/a/16260220/10930209 for an explanation
+
+    def area_of_triangle(triangle):
+        return abs(sum((triangle[0].x * (triangle[1].y - triangle[2].y), triangle[1].x * (triangle[2].y - triangle[0].y), triangle[2].x * (triangle[0].y - triangle[1].y))) / 2)
+
+    actual_area = area_of_triangle((quadrilateral[0], quadrilateral[1], point)) + area_of_triangle((quadrilateral[2], quadrilateral[1], point)) + area_of_triangle((quadrilateral[2], quadrilateral[3], point)) + area_of_triangle((quadrilateral[0], quadrilateral[3], point))
+    quadrilateral_area = area_of_triangle((quadrilateral[0], quadrilateral[2], quadrilateral[1])) + area_of_triangle((quadrilateral[0], quadrilateral[2], quadrilateral[3]))
+
+    # This is to account for any floating point errors
+    return almost_equals(actual_area, quadrilateral_area, 0.001)
+
+
+def perimeter_of_ellipse(a,b):
+    return math.pi * (3*(a+b) - math.sqrt((3*a + b) * (a + 3*b)))
+
+
+def dodge_impulse(agent):
+    car_speed = agent.me.velocity.magnitude()
+    impulse = 500 * (1 + 0.9 * (car_speed / 2300))
+    dif = car_speed + impulse - 2300
+    if dif > 0:
+        impulse -= dif
+    return impulse
