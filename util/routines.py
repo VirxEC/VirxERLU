@@ -384,7 +384,7 @@ class Aerial:
             agent.dbg_2d("Flipping")
             local_target = agent.me.local(self.shot_vector).flatten().normalize()
             agent.controller.pitch = -local_target.x
-            agent.controller.yaw = local_target.y * sign(local_target.x)
+            agent.controller.yaw = local_target.y
             agent.controller.jump = True
 
 
@@ -394,7 +394,7 @@ class flip:
     def __init__(self, vector, cancel=False):
         vector = vector.flatten().normalize()
         self.pitch = -vector.x
-        self.yaw = vector.y * sign(vector.x)
+        self.yaw = vector.y
         self.cancel = cancel
         # the time the jump began
         self.time = -1
@@ -843,7 +843,7 @@ class jump_shot:
                     # Get the required pitch and yaw to flip correctly
                     vector = agent.me.local_location(self.offset_target).flatten().normalize()
                     self.p = -vector.x
-                    self.y = vector.y * sign(vector.x)
+                    self.y = vector.y
 
                     agent.controller.pitch = self.p
                     agent.controller.yaw = self.y
