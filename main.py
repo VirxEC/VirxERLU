@@ -38,18 +38,23 @@ class Bot(VirxERLU):
             # we've made our decision and we don't want to run anything else
             return
 
-        # If we have less than 36 boost and the stack is clear
+        # If we have less than 36 boost
         # TODO this bot will go for boost no matter what - this is AWFUL, especially in a 1v1!
-        if self.me.boost < 36 and self.is_clear():
-            # Get a list of all of the large, active boosts
-            boosts = tuple(boost for boost in self.boosts if boost.active and boost.large)
-            # Get the closest boost
-            closest_boost = min(boosts, key=lambda boost: boost.location.dist(self.me.location))
-            # Goto the nearest boost
-            self.push(routines.goto_boost(closest_boost))
+        if self.me.boost < 36:
+            # If the stack is clear
+            if self.is_clear():
+                # Get a list of all of the large, active boosts
+                boosts = tuple(boost for boost in self.boosts if boost.active and boost.large)
+                # Get the closest boost
+                closest_boost = min(boosts, key=lambda boost: boost.location.dist(self.me.location))
+                # Goto the nearest boost
+                self.push(routines.goto_boost(closest_boost))
+
+            # if the stack isn't clear, then we'll wait for it to clear to we can then get some boost
 
             # we've made our decision and we don't want to run anything else
             return
+
 
         # if the stack is clear, then run the following - otherwise, if the stack isn't empty, then look for a shot every 4th tick while the other routine is running
         if self.is_clear() or self.odd_tick == 0:
