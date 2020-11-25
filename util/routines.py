@@ -348,23 +348,18 @@ class Aerial:
 
         if not self.dodging:
             target = delta_x if delta_x.magnitude() > 50 else self.shot_vector
-
             target = agent.me.local(target)
-            land_on_ceiling = virxrlcu.find_landing_plane(tuple(agent.me.location), tuple(agent.me.velocity), agent.gravity.z) == 4
 
             if self.jumping:
                 defaultPD(agent, target.flatten(), up=agent.me.up)
-            elif land_on_ceiling:
+            elif virxrlcu.find_landing_plane(tuple(agent.me.location), tuple(agent.me.velocity), agent.gravity.z) == 4:
                 defaultPD(agent, target, upside_down=True)
             else:
                 defaultPD(agent, target, upside_down=self.shot_vector.z < 0)
-                # abs(Vector(x=1).angle(target)) < 0.25
-                # abs(agent.me.orientation.det() - 1.0) < 0.01
-                if T > 1:
-                    agent.controller.roll = 1 if self.shot_vector.z < 0 else -1
 
         # only boost/throttle if we're facing the right direction
         if abs(agent.me.forward.dot(direction)) > 0.5 and T > 0:
+            if T > 0.5 and not self.jumping: agent.controller.roll = 1 if self.shot_vector.z < 0 else -1
             # the change in velocity the bot needs to put it on an intercept course with the target
             delta_v = delta_x.dot(agent.me.forward) / T
             if agent.me.boost > 0 and delta_v >= agent.boost_accel * min_boost_time:
@@ -856,7 +851,7 @@ class jump_shot:
                     agent.controller.yaw = self.y
                 else:
                     # Face the target as much as possible
-                    defaultPD(agent, agent.me.local_location(self.offset_target * directio))
+                    defaultPD(agent, agent.me.local_location(self.offset_target * direction))
 
                 if jump_elapsed <= jump_max_duration and hf <= self.offset_target.z:
                     # Initial jump to get airborne + we hold the jump button for extra power as required
