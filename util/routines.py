@@ -189,7 +189,7 @@ class double_jump:
                     agent.push(wave_dash(agent.me.local_location(self.offset_target)))
                 else:
                     agent.push(flip(agent.me.local_location(self.offset_target)))
-            elif agent.boost_amount != 'unlimited' and angle_to_target >= 2 and distance_remaining > 1000 and velocity < 200:
+            elif agent.boost_amount != 'unlimited' and angle_to_target >= 2 and distance_remaining > 2560 and velocity < 200:
                 agent.push(flip(agent.me.local_location(self.offset_target), True))
         else:
             # Mark the time we started jumping so we know when to dodge
@@ -214,9 +214,9 @@ class double_jump:
             xf += agent.me.up * jump_speed * (T - tau)
 
             delta_x = self.offset_target - xf
-            direction = delta_x.normalize()
+            d_direction = delta_x.normalize()
 
-            if abs(agent.me.forward.dot(direction)) > 0.5:
+            if abs(agent.me.forward.dot(d_direction)) > 0.5:
                 delta_v = delta_x.dot(agent.me.forward) / T
                 if agent.me.boost > 0 and delta_v >= agent.boost_accel * min_boost_time:
                     agent.controller.boost = True
@@ -237,10 +237,10 @@ class double_jump:
             if self.counter == 3:
                 agent.controller.jump = True
             elif self.counter == 4:
-                defaultPD(agent, agent.me.local(self.shot_vector), upside_down=True)
+                defaultPD(agent, agent.me.local(self.shot_vector * direction), upside_down=True)
 
             if self.counter < 3:
-                defaultPD(agent, agent.me.local(self.shot_vector.flatten()))
+                defaultPD(agent, agent.me.local(self.shot_vector.flatten() * direction))
 
         l_vf = vf + agent.me.location
         agent.line(l_vf-Vector(z=100), l_vf+Vector(z=100), agent.renderer.red())
@@ -499,9 +499,9 @@ class goto:
         if agent.me.airborne:
             agent.push(recovery(self.target))
         elif agent.me.boost < 60 and angle_to_target < 0.03 and velocity > 500 and velocity < 2150 and distance_remaining / velocity > 2:
-                agent.push(flip(local_target))
+                agent.push(flip(agent.me.local_location(self.target)))
         elif direction == -1 and distance_remaining > 1000 and velocity < 200:
-            agent.push(flip(local_target, True))
+            agent.push(flip(agent.me.local_location(self.target), True))
 
 
 class shadow:
@@ -856,7 +856,7 @@ class jump_shot:
                     agent.controller.yaw = self.y
                 else:
                     # Face the target as much as possible
-                    defaultPD(agent, agent.me.local_location(self.offset_target))
+                    defaultPD(agent, agent.me.local_location(self.offset_target * directio))
 
                 if jump_elapsed <= jump_max_duration and hf <= self.offset_target.z:
                     # Initial jump to get airborne + we hold the jump button for extra power as required

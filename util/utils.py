@@ -63,12 +63,8 @@ def defaultThrottle(agent, target_speed, target_angles=None, local_target=None):
 
 
 def defaultDrive(agent, target_speed, local_target):
-    if target_speed < 0:
-        local_target.y *= -1
-
     target_angles = defaultPD(agent, local_target)
-    if target_speed != 0:
-        velocity = defaultThrottle(agent, target_speed, target_angles, local_target)
+    velocity = defaultThrottle(agent, target_speed, target_angles, local_target)
 
     return target_angles, velocity
 
