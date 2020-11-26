@@ -350,7 +350,7 @@ class Aerial:
             target = delta_x if delta_x.magnitude() > 50 else self.shot_vector
             target = agent.me.local(target)
 
-            if self.jumping:
+            if agent.controller.jump:
                 defaultPD(agent, target.flatten(), up=agent.me.up)
             elif virxrlcu.find_landing_plane(tuple(agent.me.location), tuple(agent.me.velocity), agent.gravity.z) == 4:
                 defaultPD(agent, target, upside_down=True)
@@ -359,7 +359,7 @@ class Aerial:
 
         # only boost/throttle if we're facing the right direction
         if abs(agent.me.forward.dot(direction)) > 0.5 and T > 0:
-            if T > 0.5 and not self.jumping: agent.controller.roll = 1 if self.shot_vector.z < 0 else -1
+            if T > 1 and not self.jumping: agent.controller.roll = 1 if self.shot_vector.z < 0 else -1
             # the change in velocity the bot needs to put it on an intercept course with the target
             delta_v = delta_x.dot(agent.me.forward) / T
             if agent.me.boost > 0 and delta_v >= agent.boost_accel * min_boost_time:
