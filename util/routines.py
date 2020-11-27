@@ -216,7 +216,7 @@ class double_jump:
             delta_x = self.offset_target - xf
             d_direction = delta_x.normalize()
 
-            if abs(agent.me.forward.dot(d_direction)) > 0.5:
+            if direction == 1 and abs(agent.me.forward.dot(d_direction)) > 0.5:
                 delta_v = delta_x.dot(agent.me.forward) / T
                 if agent.me.boost > 0 and delta_v >= agent.boost_accel * min_boost_time:
                     agent.controller.boost = True
@@ -817,7 +817,7 @@ class jump_shot:
             delta_x = self.offset_target - xf
             d_direction = delta_x.normalize()
 
-            if abs(agent.me.forward.dot(d_direction)) > 0.5 and self.counter < 3:
+            if direction == 1 and abs(agent.me.forward.dot(d_direction)) > 0.5 and self.counter < 3:
                 delta_v = delta_x.dot(agent.me.forward) / T
                 if agent.me.boost > 0 and delta_v >= agent.boost_accel * min_boost_time:
                     agent.controller.boost = True
