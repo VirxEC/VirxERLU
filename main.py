@@ -53,9 +53,8 @@ class Bot(VirxERLU):
                     # Goto the nearest boost
                     self.push(routines.goto_boost(closest_boost))
 
-            # if the stack isn't clear, then we'll wait for it to clear to we can then get some boost
+            # we've made our decision and we don't want to run anything else
             if not self.is_clear():
-                # we've made our decision and we don't want to run anything else
                 return
 
 
