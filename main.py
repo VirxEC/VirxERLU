@@ -45,15 +45,18 @@ class Bot(VirxERLU):
             if self.is_clear():
                 # Get a list of all of the large, active boosts
                 boosts = tuple(boost for boost in self.boosts if boost.active and boost.large)
-                # Get the closest boost
-                closest_boost = min(boosts, key=lambda boost: boost.location.dist(self.me.location))
-                # Goto the nearest boost
-                self.push(routines.goto_boost(closest_boost))
+
+                # if there's at least one large and active boost
+                if len(boosts) > 0:
+                    # Get the closest boost
+                    closest_boost = min(boosts, key=lambda boost: boost.location.dist(self.me.location))
+                    # Goto the nearest boost
+                    self.push(routines.goto_boost(closest_boost))
 
             # if the stack isn't clear, then we'll wait for it to clear to we can then get some boost
-
-            # we've made our decision and we don't want to run anything else
-            return
+            if not self.is_clear():
+                # we've made our decision and we don't want to run anything else
+                return
 
 
         # if the stack is clear, then run the following - otherwise, if the stack isn't empty, then look for a shot every 4th tick while the other routine is running

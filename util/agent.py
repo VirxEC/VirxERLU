@@ -50,7 +50,8 @@ class VirxERLU(BaseAgent):
 
         self.print("Building game information")
 
-        mutators = self.get_match_settings().MutatorSettings()
+        match_settings = self.get_match_settings()
+        mutators = match_settings.MutatorSettings()
 
         gravity = (
             Vector(z=-650),
@@ -76,9 +77,19 @@ class VirxERLU(BaseAgent):
             "no boost"
         )
 
+        game_mode = (
+            "soccer",
+            "hoops",
+            "dropshot",
+            "hockey",
+            "rumble",
+            "heatseeker"
+        )
+
         self.gravity = gravity[mutators.GravityOption()]
         self.boost_accel = boost_accel[mutators.BoostStrengthOption()]
         self.boost_amount = boost_amount[mutators.BoostOption()]
+        self.game_mode = game_mode[match_settings.GameMode()]
 
         self.friends = ()
         self.foes = ()
