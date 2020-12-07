@@ -171,25 +171,24 @@ class double_jump:
 
             local_offset_target = agent.me.local_location(self.offset_target.flatten())
             local_vf = agent.me.local(vf.flatten())
+            time = distance_remaining / (velocity + dodge_impulse(agent))
 
             if ((abs(velocity) < 100 and distance_remaining < agent.me.hitbox.length / 2) or (abs(local_offset_target.y) < 92 and direction * local_vf.x >= direction * (local_offset_target.x - agent.me.hitbox.length / 3) and direction * local_offset_target.x > 0)) and T <= self.needed_jump_time * 1.025:
                 self.jumping = True
             elif agent.me.airborne:
                 agent.push(recovery(local_final_target if Tj > 0 else None))
-            elif T <= 0 or (Tj > 0 and distance_remaining > 50 and not virxrlcu.double_jump_shot_is_viable(T, agent.boost_accel, tuple(agent.gravity), agent.me.get_raw(agent), self.offset_target.z, tuple((final_target - agent.me.location).normalize()), distance_remaining)):
+            elif T <= self.needed_jump_time or (Tj > 0 and distance_remaining > 50 and (not virxrlcu.double_jump_shot_is_viable(T, agent.boost_accel, tuple(agent.gravity), agent.me.get_raw(agent), self.offset_target.z, tuple((final_target - agent.me.location).normalize()), distance_remaining))):
                 # If we're out of time or the ball was hit away or we just can't get enough speed, pop
                 agent.pop()
                 agent.shooting = False
-                agent.shot_weight = -1
-                agent.shot_time = -1
                 if agent.me.airborne:
                     agent.push(ball_recovery())
-            elif agent.boost_amount != 'unlimited' and agent.me.boost < 36 and angle_to_target < 0.03 and velocity > 600 and velocity + dodge_impulse(agent) <= speed_required and distance_remaining / velocity > 3:
-                if agent.gravity.z < -450 and distance_remaining / velocity < 5:
+            elif agent.boost_amount != 'unlimited' and agent.me.boost < 48 and angle_to_target < 0.03 and velocity > 600 and time >= Tj + 1.75:
+                if agent.gravity.z < -450 and time < 5:
                     agent.push(wave_dash(agent.me.local_location(self.offset_target)))
                 else:
                     agent.push(flip(agent.me.local_location(self.offset_target)))
-            elif agent.boost_amount != 'unlimited' and angle_to_target >= 2 and distance_remaining > 2560 and velocity < 200:
+            elif agent.boost_amount != 'unlimited' and angle_to_target >= 2 and velocity < 200 and time >= Tj + 1.75:
                 agent.push(flip(agent.me.local_location(self.offset_target), True))
         else:
             # Mark the time we started jumping so we know when to dodge
@@ -372,8 +371,6 @@ class Aerial:
         if T <= -0.4 or (not self.jumping and T > 1.5 and not virxrlcu.aerial_shot_is_viable(T, agent.boost_accel, tuple(agent.gravity), agent.me.get_raw(agent), tuple(self.target))):
             agent.pop()
             agent.shooting = False
-            agent.shot_weight = -1
-            agent.shot_time = -1
             agent.push(ball_recovery())
         elif (self.ceiling and self.target.dist(agent.me.location) < 92 + agent.me.hitbox.length and not agent.me.doublejumped and agent.me.location.z < agent.ball.location.z + 92 and self.target.y * side(agent.team) > -4240) or (not self.ceiling and not agent.me.doublejumped and T < 0.1):
             agent.dbg_2d("Flipping")
@@ -493,10 +490,10 @@ class goto:
 
         if agent.me.airborne:
             agent.push(recovery(self.target))
-        elif agent.me.boost < 60 and angle_to_target < 0.03 and velocity > 500 and velocity < 2150 and distance_remaining / velocity > 2:
-                agent.push(flip(agent.me.local_location(self.target)))
-        elif direction == -1 and distance_remaining > 1000 and velocity < 200:
-            agent.push(flip(agent.me.local_location(self.target), True))
+        elif agent.me.boost < 60 and angle_to_target < 0.03 and velocity > 500 and distance_remaining / (velocity + dodge_impulse(agent)) > 1.75:
+            agent.push(flip(agent.me.local_location(self.target)))
+        elif direction == -1 and velocity < 200 and distance_remaining / (velocity + dodge_impulse(agent)) > 1.75:
+            agent.push(flip(agent.me.local_location(self.target), distance_remaining > 1280))
 
 
 class shadow:
@@ -777,12 +774,13 @@ class jump_shot:
 
             local_offset_target = agent.me.local_location(self.offset_target.flatten())
             local_vf = agent.me.local(vf.flatten())
+            time = distance_remaining / (velocity + dodge_impulse(agent))
 
             if ((abs(velocity) < 100 and distance_remaining < agent.me.hitbox.length / 2) or (abs(local_offset_target.y) < 92 and direction * local_vf.x >= direction * (local_offset_target.x - agent.me.hitbox.length / 3) and direction * local_offset_target.x > 0)) and T <= self.needed_jump_time * 1.025:
                 self.jumping = True
             elif agent.me.airborne:
                 agent.push(recovery(local_final_target if Tj > 0 else None))
-            elif T <= 0 or (Tj > 0 and distance_remaining > 50 and not virxrlcu.jump_shot_is_viable(T, agent.boost_accel, tuple(agent.gravity), agent.me.get_raw(agent), self.offset_target.z, tuple((final_target - agent.me.location).normalize()), distance_remaining)):
+            elif T <= self.needed_jump_time or (Tj > 0 and distance_remaining > 50 and (not virxrlcu.jump_shot_is_viable(T, agent.boost_accel, tuple(agent.gravity), agent.me.get_raw(agent), self.offset_target.z, tuple((final_target - agent.me.location).normalize()), distance_remaining))):
                 # If we're out of time or not fast enough to be within 45 units of target at the intercept time, we pop
                 agent.pop()
                 agent.shooting = False
@@ -790,12 +788,12 @@ class jump_shot:
                 agent.shot_time = -1
                 if agent.me.airborne:
                     agent.push(recovery())
-            elif agent.boost_amount != 'unlimited' and agent.me.boost < 36 and angle_to_target < 0.03 and velocity > 600 and velocity + dodge_impulse(agent) <= speed_required and distance_remaining / velocity > 3:
-                if agent.gravity.z < -450 and distance_remaining / velocity < 5:
+            elif agent.boost_amount != 'unlimited' and agent.me.boost < 48 and angle_to_target < 0.03 and velocity > 600 and time >= Tj + 1.75:
+                if agent.gravity.z < -450 and time < 5:
                     agent.push(wave_dash(agent.me.local_location(self.offset_target)))
                 else:
                     agent.push(flip(agent.me.local_location(self.offset_target)))
-            elif agent.boost_amount != 'unlimited' and direction == -1 and distance_remaining > 1500 and velocity < 200 and distance_remaining / abs(velocity) > 2:
+            elif agent.boost_amount != 'unlimited' and direction == -1 and distance_remaining > 2560 and velocity < 200 and time >= Tj + 1.75:
                 agent.push(flip(agent.me.local_location(self.offset_target), True))
         else:
             if self.jump_time == -1:
@@ -826,7 +824,7 @@ class jump_shot:
                 if abs(delta_v) > throttle_accel * min_boost_time:
                     agent.controller.throttle = cap(delta_v / (throttle_accel * min_boost_time), -1, 1)
 
-            if T <= -0.4 or (not agent.me.airborne and self.counter >= 3):
+            if T <= -0.8 or (not agent.me.airborne and self.counter >= 3):
                 agent.pop()
                 agent.shooting = False
                 agent.shot_weight = -1
@@ -946,7 +944,7 @@ class ground_shot:
         if velocity == 0: velocity = 1
 
         local_offset_target = agent.me.local_location(self.offset_target.flatten())
-        time = distance_remaining / velocity
+        time = distance_remaining / (velocity + dodge_impulse(agent))
 
         vf = agent.me.velocity + agent.gravity * T
         local_vf = agent.me.local(vf.flatten())
@@ -963,10 +961,10 @@ class ground_shot:
             agent.shot_time = -1
             if agent.me.airborne:
                 agent.push(recovery())
-        elif agent.boost_amount != 'unlimited' and agent.me.boost < 36 and angle_to_target < 0.03 and velocity > 500 and time > 1 and velocity + dodge_impulse(agent) <= speed_required:
+        elif agent.boost_amount != 'unlimited' and agent.me.boost < 48 and angle_to_target < 0.03 and velocity > 500 and T > 1 and time >= T + 0.5:
             speed_gain_routine = wave_dash if agent.gravity.z < -450 and time < 3 and time > 1 else flip
             agent.push(speed_gain_routine(agent.me.local_location(self.offset_target)))
-        elif agent.boost_amount != 'unlimited' and direction == -1 and velocity < 200 and distance_remaining / abs(velocity) > 4:
+        elif agent.boost_amount != 'unlimited' and direction == -1 and velocity < 200 and time >= T + 0.5:
             agent.push(flip(agent.me.local_location(self.offset_target), True))
 
 

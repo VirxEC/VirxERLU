@@ -46,7 +46,7 @@ def defaultThrottle(agent, target_speed, target_angles=None, local_target=None):
 
         angle_to_target = abs(target_angles[1])
         if agent.controller.handbrake:
-            if ((angle_to_target > 2.8) if sign(car_speed) == 1 else (angle_to_target < 0.34)):
+            if angle_to_target > 2.8:
                 if abs(target_speed) > 950: target_speed = 950 * sign(target_speed)
                 agent.controller.steer = sign(agent.controller.steer)
                 agent.controller.handbrake = False
@@ -63,6 +63,9 @@ def defaultThrottle(agent, target_speed, target_angles=None, local_target=None):
 
 
 def defaultDrive(agent, target_speed, local_target):
+    if target_speed < 0:
+        local_target *= -1
+
     target_angles = defaultPD(agent, local_target)
     velocity = defaultThrottle(agent, target_speed, target_angles, local_target)
 
@@ -127,15 +130,18 @@ def quadratic(a, b, c):
     try:
         inside = math.sqrt(inside)
     except ValueError:
-        return -1, -1
+        return ()
 
-    if a == 0:
-        return -1, -1
+    if inside < 0:
+        return ()
 
     b = -b
     a = 2*a
 
-    return (b + inside)/a, (b - inside)/a
+    if inside == 0:
+        return (b/a,)
+
+    return ((b + inside)/a, (b - inside)/a)
 
 
 def side(x):

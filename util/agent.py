@@ -601,6 +601,10 @@ class Vector:
             value = value._np
         return (self._np == value).all()
 
+    # len(self)
+    def __len__(self):
+        return 3  # this is a 3 dimensional vector, so we return 3
+
     # str(self)
     def __str__(self):
         # Vector's can be printed to console
