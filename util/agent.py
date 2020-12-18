@@ -46,7 +46,9 @@ class VirxERLU(BaseAgent):
             self.print("Starting the GUI...")
             self.gui.start()
 
-        self.match_comms = None
+        self.match_comms = MatchComms(self)
+        self.print("Starting the match communication handler...")
+        self.match_comms.start()
 
         self.print("Building game information")
 
