@@ -9,8 +9,9 @@ def cap(x, low, high):
 
 
 def cap_in_field(agent, target):
-    target.x = cap(target.x, -850, 850) if abs(agent.me.location.y) > 5120 - (agent.me.hitbox.length / 2) else cap(target.x, -4050, 4050)
-    target.y = cap(target.y, -5120, 5120)
+    if abs(target.x) > 893 - agent.me.hitbox.length:
+        target.y = cap(target.y, -5120 + agent.me.hitbox.length, 5120 - agent.me.hitbox.length)
+    target.x = cap(target.x, -893 + agent.me.hitbox.length, 893 - agent.me.hitbox.length) if abs(agent.me.location.y) > 5120 - (agent.me.hitbox.length / 2) else cap(target.x, -4093 + agent.me.hitbox.length, 4093 - agent.me.hitbox.length)
 
     return target
 
@@ -30,7 +31,7 @@ def defaultPD(agent, local_target, upside_down=False, up=None):
     agent.controller.steer = steerPD(target_angles[1], 0)
     agent.controller.pitch = steerPD(target_angles[0], agent.me.angular_velocity.y/4)
     agent.controller.yaw = steerPD(target_angles[1], -agent.me.angular_velocity.z/4)
-    agent.controller.roll = steerPD(target_angles[2], agent.me.angular_velocity.x/2)
+    agent.controller.roll = steerPD(target_angles[2], agent.me.angular_velocity.x/4)
     # Returns the angles, which can be useful for other purposes
     return target_angles
 
@@ -42,9 +43,11 @@ def defaultThrottle(agent, target_speed, target_angles=None, local_target=None):
     if not agent.me.airborne:
         if target_angles is not None and local_target is not None:
             turn_rad = turn_radius(abs(car_speed))
-            agent.controller.handbrake = not agent.me.airborne and agent.me.velocity.magnitude() > 150 and (is_inside_turn_radius(turn_rad, local_target, sign(agent.controller.steer)) if abs(local_target.y) < turn_rad else abs(local_target.x) < turn_rad)
+            agent.controller.handbrake = not agent.me.airborne and agent.me.velocity.magnitude() > 250 and (is_inside_turn_radius(turn_rad, local_target, sign(agent.controller.steer)) if abs(local_target.y) < turn_rad else abs(local_target.x) < turn_rad)
 
         angle_to_target = abs(target_angles[1])
+        if target_speed < 0:
+            angle_to_target = math.pi - angle_to_target
         if agent.controller.handbrake:
             if angle_to_target > 2.8:
                 if abs(target_speed) > 950: target_speed = 950 * sign(target_speed)
@@ -54,22 +57,33 @@ def defaultThrottle(agent, target_speed, target_angles=None, local_target=None):
                 agent.controller.steer = agent.controller.yaw
 
         t = target_speed - car_speed
-        agent.controller.throttle = cap((t**2) * sign(t)/1000, -1, 1)
+        ta = throttle_acceleration(car_speed)
+        agent.controller.throttle = cap(t / ta, -1, 1) if ta != 0 and (target_speed < 1410 or t < -ta/10) else sign(t if abs(t) > 117 else target_speed)
 
         if not agent.controller.handbrake:
-            agent.controller.boost = (t > 150 or (target_speed > 1410 and t > agent.boost_accel / 30)) and agent.controller.throttle > 0.9 and angle_to_target < 0.5
+            agent.controller.boost = angle_to_target < 0.5 and (t > ta / 30 + agent.boost_accel / 30 if target_speed < 1410 else t > agent.boost_accel / 30)
 
     return car_speed
 
 
 def defaultDrive(agent, target_speed, local_target):
-    if target_speed < 0:
-        local_target *= -1
-
     target_angles = defaultPD(agent, local_target)
     velocity = defaultThrottle(agent, target_speed, target_angles, local_target)
 
     return target_angles, velocity
+
+
+def throttle_acceleration(car_velocity_x):
+    x = abs(car_velocity_x)
+    if x >= 1410:
+        return 0
+
+    # use y = mx + b to find the throttle acceleration
+    if x < 1400:
+        return (-36 / 35) * x + 1600;
+
+    x -= 1400;
+    return -16 * x + 160;
 
 
 def is_inside_turn_radius(turn_rad, local_target, steer_direction):
@@ -91,16 +105,20 @@ def curvature(v):
     # v is the magnitude of the velocity in the car's forward direction
     if 0 <= v < 500:
         return 0.0069 - 5.84e-6 * v
-    elif 500 <= v < 1000:
+        
+    if 500 <= v < 1000:
         return 0.00561 - 3.26e-6 * v
-    elif 1000 <= v < 1500:
+
+    if 1000 <= v < 1500:
         return 0.0043 - 1.95e-6 * v
-    elif 1500 <= v < 1750:
-        return 0.003025 - 1.1e-6 * v
-    elif 1750 <= v < 2500:
-        return 0.0018 - 0.4e-6 * v
-    else:
-        return 0
+
+    if 1500 <= v < 1750:
+        return 0.003025 - 1.1e-7 * v
+
+    if 1750 <= v < 2500:
+        return 0.0018 - 0.4e-7 * v
+
+    return 0
 
 
 def in_field(point, radius):

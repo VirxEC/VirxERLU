@@ -41,11 +41,6 @@ def find_shot(agent, target, cap_=6, can_aerial=True, can_double_jump=True, can_
 
     # Takes a tuple of (left,right) target pairs and finds routines that could hit the ball between those target pairs
     # Only meant for routines that require a defined intercept time/place in the future
-    # Here we get the slices that need to be searched - by defining a cap, we can reduce the number of slices and improve search times
-    slices = get_slices(agent, cap_)
-
-    if slices is None:
-        return
 
     # Assemble data in a form that can be passed to C
     targets = (
@@ -66,6 +61,18 @@ def find_shot(agent, target, cap_=6, can_aerial=True, can_double_jump=True, can_
     min_aerial_height = 551 if max_aerial_height > 1200 and agent.me.location.z >= 2044 - agent.me.hitbox.height * 1.1 else (150 if agent.boost_amount == 'unlimited' or agent.me.airborne else 450)
 
     is_on_ground = not agent.me.airborne
+    can_ground = is_on_ground and can_ground
+    can_jump = is_on_ground and can_jump
+    can_double_jump = is_on_ground and can_double_jump
+
+    if not can_ground and not can_jump and not can_double_jump and not can_aerial:
+        return
+
+    # Here we get the slices that need to be searched - by defining a cap, we can reduce the number of slices and improve search times
+    slices = get_slices(agent, cap_)
+
+    if slices is None:
+        return
 
     # Loop through the slices
     for ball_slice in slices:
@@ -85,34 +92,18 @@ def find_shot(agent, target, cap_=6, can_aerial=True, can_double_jump=True, can_
 
         # Check if we can make a shot at this slice
         # This operation is very expensive, so we use C to improve run time
-        if is_on_ground:
-            if can_ground:
-                shot = virxrlcu.parse_slice_for_ground_shot_with_target(time_remaining, *game_info, ball_info, me, targets)
+        shot = virxrlcu.parse_slice_for_shot_with_target(can_ground, can_jump, can_double_jump, can_aerial and (min_aerial_height < ball_location[2] < max_aerial_height), time_remaining, *game_info, gravity, ball_info, me, targets)
 
-                # If we found a viable shot, pass the data into the shot routine and return the shot
-                if shot['found'] == 1:
-                    return ground_shot(intercept_time, (Vector(*shot['targets'][0]), Vector(*shot['targets'][1])))
-
-            if can_jump:
-                shot = virxrlcu.parse_slice_for_jump_shot_with_target(time_remaining, *game_info, gravity, ball_info, me, targets)
-
-                # If we found a viable shot, pass the data into the shot routine and return the shot
-                if shot['found'] == 1:
-                    return jump_shot(intercept_time, (Vector(*shot['targets'][0]), Vector(*shot['targets'][1])))
-
-            if can_double_jump:
-                shot = virxrlcu.parse_slice_for_double_jump_shot_with_target(time_remaining, *game_info, gravity, ball_info, me, targets)
-
-                # If we found a viable shot, pass the data into the shot routine and return the shot
-                if shot['found'] == 1:
-                    return double_jump(intercept_time, (Vector(*shot['targets'][0]), Vector(*shot['targets'][1])))
-
-        if can_aerial and not (min_aerial_height > ball_location[2] or ball_location[2] > max_aerial_height):
-            shot = virxrlcu.parse_slice_for_aerial_shot_with_target(time_remaining, *game_info, gravity, ball_info, me, targets)
-
-            # If we found a viable shot, pass the data into the shot routine and return the shot
-            if shot['found'] == 1:
+        if shot['found'] == 1:
+            if shot['shot_type'] == 3:
                 return Aerial(intercept_time, (Vector(*shot['targets'][0]), Vector(*shot['targets'][1])), shot['fast'])
+
+            shot_switch = [
+                ground_shot,
+                jump_shot,
+                double_jump
+            ]
+            return shot_switch[shot['shot_type']](intercept_time, (Vector(*shot['targets'][0]), Vector(*shot['targets'][1])))
 
 
 def find_any_shot(agent, cap_=6, can_aerial=True, can_double_jump=True, can_jump=True, can_ground=True):
@@ -121,11 +112,6 @@ def find_any_shot(agent, cap_=6, can_aerial=True, can_double_jump=True, can_jump
         return
 
     # Only meant for routines that require a defined intercept time/place in the future
-    # Here we get the slices that need to be searched - by defining a cap, we can reduce the number of slices and improve search times
-    slices = get_slices(agent, cap_)
-
-    if slices is None:
-        return
 
     # Assemble data in a form that can be passed to C
     me = agent.me.get_raw(agent)
@@ -141,6 +127,18 @@ def find_any_shot(agent, cap_=6, can_aerial=True, can_double_jump=True, can_jump
     min_aerial_height = 551 if max_aerial_height > 1200 and agent.me.location.z >= 2044 - agent.me.hitbox.height * 1.1 else (150 if agent.boost_amount == 'unlimited' or agent.me.airborne else 450)
 
     is_on_ground = not agent.me.airborne
+    can_ground = is_on_ground and can_ground
+    can_jump = is_on_ground and can_jump
+    can_double_jump = is_on_ground and can_double_jump
+
+    if not can_ground and not can_jump and not can_double_jump and not can_aerial:
+        return
+
+    # Here we get the slices that need to be searched - by defining a cap, we can reduce the number of slices and improve search times
+    slices = get_slices(agent, cap_)
+
+    if slices is None:
+        return
 
     # Loop through the slices
     for ball_slice in slices:
@@ -160,37 +158,21 @@ def find_any_shot(agent, cap_=6, can_aerial=True, can_double_jump=True, can_jump
 
         # Check if we can make a shot at this slice
         # This operation is very expensive, so we use C to improve run time
-        if is_on_ground:
-            if can_ground:
-                shot = virxrlcu.parse_slice_for_ground_shot(time_remaining, *game_info, ball_info, me)
+        shot = virxrlcu.parse_slice_for_shot(can_ground, can_jump, can_double_jump, can_aerial and (min_aerial_height < ball_location[2] < max_aerial_height), time_remaining, *game_info, gravity, ball_info, me)
 
-                # If we found a viable shot, pass the data into the shot routine and return the shot
-                if shot['found'] == 1:
-                    return ground_shot(intercept_time)
-
-            if can_jump:
-                shot = virxrlcu.parse_slice_for_jump_shot(time_remaining, *game_info, gravity, ball_info, me)
-
-                # If we found a viable shot, pass the data into the shot routine and return the shot
-                if shot['found'] == 1:
-                    return jump_shot(intercept_time)
-
-            if can_double_jump:
-                shot = virxrlcu.parse_slice_for_double_jump_shot(time_remaining, *game_info, gravity, ball_info, me)
-
-                # If we found a viable shot, pass the data into the shot routine and return the shot
-                if shot['found'] == 1:
-                    return double_jump(intercept_time)
-
-        if can_aerial and not (min_aerial_height > ball_location[2] or ball_location[2] > max_aerial_height):
-            shot = virxrlcu.parse_slice_for_aerial_shot(time_remaining, *game_info, gravity, ball_info, me)
-
-            # If we found a viable shot, pass the data into the shot routine and return the shot
-            if shot['found'] == 1:
+        if shot['found'] == 1:
+            if shot['shot_type'] == 3:
                 return Aerial(intercept_time, fast_aerial=shot['fast'])
 
+            shot_switch = [
+                ground_shot,
+                jump_shot,
+                double_jump
+            ]
+            return shot_switch[shot['shot_type']](intercept_time)
 
-def get_slices(agent, cap_, start_slice=12):
+
+def get_slices(agent, cap_):
     # Get the struct
     struct = agent.ball_prediction_struct
 
@@ -198,6 +180,7 @@ def get_slices(agent, cap_, start_slice=12):
     if struct is None:
         return
 
+    start_slice = 12
     end_slices = None
 
     # If we're shooting, crop the struct
@@ -222,5 +205,5 @@ def get_slices(agent, cap_, start_slice=12):
         return
 
     # for every second worth of slices that we have to search, skip 1 more slice (for performance reasons) - min 1 and max 3
-    skip = cap(end_slice - start_slice, 1, 3)
+    skip = cap(end_slice - start_slice / 60, 1, 3)
     return struct.slices[start_slice:end_slice:skip]

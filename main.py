@@ -57,26 +57,22 @@ class Bot(VirxERLU):
             if not self.is_clear():
                 return
 
-
         # if the stack is clear, then run the following - otherwise, if the stack isn't empty, then look for a shot every 4th tick while the other routine is running
         if self.is_clear() or self.odd_tick == 0:
             shot = None
-            can_drive = not self.me.airborne
 
             # TODO we might miss the net, even when using a target - make a pair of targets that are small than the goal so we have a better chance of scoring!
             # If the ball is on the enemy's side of the field, or slightly on our side
             if self.ball.location.y * utils.side(self.team) < 640:
-                # Find a shot on target - disable double_jump, jump_shot, and ground_shot if we're airborne
-                # RLBot's ball prediction is 60hz and goes 6 seconds into the future - we'll set the max seconds to search to 6, here
-                shot = tools.find_shot(self, self.foe_goal_shot, can_double_jump=can_drive, can_jump=can_drive, can_ground=can_drive, cap_=6)
+                # Find a shot, on target - double_jump, jump_shot, and ground_shot  are automatically disabled if we're airborne
+                shot = tools.find_shot(self, self.foe_goal_shot)
 
             # TODO Using an anti-target here could be cool - do to this, pass in a target tuple that's (right_target, left_target) (instead of (left, right)) into tools.find_shot (NOT tools.find_any_shot)
             # TODO When possible, we might want to take a little bit more time to shot the ball anywhere in the opponent's end - this target should probably be REALLY LONG AND HIGH!
             # If we're behind the ball and we couldn't find a shot on target
             if shot is None and self.ball.location.y * utils.side(self.team) < self.me.location.y * utils.side(self.team):
-                # Find a shot, but without a target - disable double_jump, jump_shot, and ground_shot if we're airborne
-                # RLBot's ball prediction is 60hz and goes 6 seconds into the future - we'll set the max seconds to search to 4, here
-                shot = tools.find_any_shot(self, can_double_jump=can_drive, can_jump=can_drive, can_ground=can_drive, cap_=4)
+                # Find a shot, but without a target - double_jump, jump_shot, and ground_shot are automatically disabled if we're airborne
+                shot = tools.find_any_shot(self)
 
             # If we found a shot
             if shot is not None:
