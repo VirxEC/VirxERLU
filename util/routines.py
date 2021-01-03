@@ -2,15 +2,15 @@ import virxrlcu
 
 from util.agent import VirxERLU
 from util.utils import (Vector, almost_equals, cap, cap_in_field, defaultDrive,
-                        defaultPD, lerp, math, peek_generator, side, sign,
-                        dodge_impulse)
+                        defaultPD, dodge_impulse, lerp, math, peek_generator,
+                        side, sign)
 
 dt = 1/120
 max_speed = 2300
 throttle_accel = 66 + (2/3)
 brake_accel = Vector(x=-3500)
 boost_per_second = 33 + (1/3)
-min_boost_time = 1/30
+min_boost_time = 0.1
 jump_max_duration = 0.2
 jump_speed = 291 + (2/3)
 jump_acc = 1458 + (1/3)

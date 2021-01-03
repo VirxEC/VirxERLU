@@ -11,10 +11,11 @@ from typing import List, Tuple
 import numpy as np
 from gui import Gui
 from match_comms import MatchComms
-from rlbot.agents.base_agent import BaseAgent, SimpleControllerState
+from rlbot.agents.base_agent import SimpleControllerState
+from rlbot.agents.standalone.standalone_bot import StandaloneBot, run_bot
 
 
-class VirxERLU(BaseAgent):
+class VirxERLU(StandaloneBot):
     # Massive thanks to ddthj/GoslingAgent (GitHub repo) for the basis of VirxERLU
     # VirxERLU on VirxEC Showcase -> https://virxerlu.virxcase.dev/
     # Wiki -> https://github.com/VirxEC/VirxERLU/wiki

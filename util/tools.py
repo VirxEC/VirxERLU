@@ -1,5 +1,5 @@
 from util.routines import Aerial, double_jump, ground_shot, jump_shot, virxrlcu
-from util.utils import Vector, math, side, cap
+from util.utils import Vector, cap, math, side
 
 
 def find_ground_shot(agent, target, cap_=6):
@@ -57,9 +57,6 @@ def find_shot(agent, target, cap_=6, can_aerial=True, can_double_jump=True, can_
 
     gravity = tuple(agent.gravity)
 
-    max_aerial_height = 1200 if len(agent.friends) == 0 and len(agent.foes) == 1 else math.inf
-    min_aerial_height = 551 if max_aerial_height > 1200 and agent.me.location.z >= 2044 - agent.me.hitbox.height * 1.1 else (150 if agent.boost_amount == 'unlimited' or agent.me.airborne else 450)
-
     is_on_ground = not agent.me.airborne
     can_ground = is_on_ground and can_ground
     can_jump = is_on_ground and can_jump
@@ -92,7 +89,7 @@ def find_shot(agent, target, cap_=6, can_aerial=True, can_double_jump=True, can_
 
         # Check if we can make a shot at this slice
         # This operation is very expensive, so we use C to improve run time
-        shot = virxrlcu.parse_slice_for_shot_with_target(can_ground, can_jump, can_double_jump, can_aerial and (min_aerial_height < ball_location[2] < max_aerial_height), time_remaining, *game_info, gravity, ball_info, me, targets)
+        shot = virxrlcu.parse_slice_for_shot_with_target(can_ground, can_jump, can_double_jump, can_aerial, time_remaining, *game_info, gravity, ball_info, me, targets)
 
         if shot['found'] == 1:
             if shot['shot_type'] == 3:
@@ -123,9 +120,6 @@ def find_any_shot(agent, cap_=6, can_aerial=True, can_double_jump=True, can_jump
 
     gravity = tuple(agent.gravity)
 
-    max_aerial_height = 1200 if len(agent.friends) == 0 and len(agent.foes) == 1 else math.inf
-    min_aerial_height = 551 if max_aerial_height > 1200 and agent.me.location.z >= 2044 - agent.me.hitbox.height * 1.1 else (150 if agent.boost_amount == 'unlimited' or agent.me.airborne else 450)
-
     is_on_ground = not agent.me.airborne
     can_ground = is_on_ground and can_ground
     can_jump = is_on_ground and can_jump
@@ -158,7 +152,7 @@ def find_any_shot(agent, cap_=6, can_aerial=True, can_double_jump=True, can_jump
 
         # Check if we can make a shot at this slice
         # This operation is very expensive, so we use C to improve run time
-        shot = virxrlcu.parse_slice_for_shot(can_ground, can_jump, can_double_jump, can_aerial and (min_aerial_height < ball_location[2] < max_aerial_height), time_remaining, *game_info, gravity, ball_info, me)
+        shot = virxrlcu.parse_slice_for_shot(can_ground, can_jump, can_double_jump, can_aerial, time_remaining, *game_info, gravity, ball_info, me)
 
         if shot['found'] == 1:
             if shot['shot_type'] == 3:

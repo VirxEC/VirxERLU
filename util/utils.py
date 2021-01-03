@@ -1,6 +1,6 @@
 from queue import Full
 
-from util.agent import math, Vector
+from util.agent import Vector, math
 
 
 def cap(x, low, high):
@@ -61,7 +61,7 @@ def defaultThrottle(agent, target_speed, target_angles=None, local_target=None):
         agent.controller.throttle = cap(t / ta, -1, 1) if ta != 0 and (target_speed < 1410 or t < -ta/10) else sign(t if abs(t) > 117 else target_speed)
 
         if not agent.controller.handbrake:
-            agent.controller.boost = angle_to_target < 0.5 and (t > ta / 30 + agent.boost_accel / 30 if target_speed < 1410 else t > agent.boost_accel / 30)
+            agent.controller.boost = angle_to_target < 0.5 and (t > ta / 10 + agent.boost_accel / 10 if target_speed < 1410 else t > agent.boost_accel / 10)
 
     return car_speed
 

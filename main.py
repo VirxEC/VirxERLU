@@ -1,5 +1,5 @@
 from util import routines, tools, utils
-from util.agent import Vector, VirxERLU
+from util.agent import Vector, VirxERLU, run_bot
 
 
 class Bot(VirxERLU):
@@ -143,3 +143,7 @@ class Bot(VirxERLU):
         # See https://github.com/RLBot/RLBot/blob/master/src/main/flatbuffers/rlbot.fbs#L376 for a list of all quick chats
         if self.team is team:
             self.print(quick_chat)
+
+
+if __name__ == "__main__":
+    run_bot(Bot)
