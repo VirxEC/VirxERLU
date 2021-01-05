@@ -58,10 +58,10 @@ def defaultThrottle(agent, target_speed, target_angles=None, local_target=None):
 
         t = target_speed - car_speed
         ta = throttle_acceleration(car_speed)
-        agent.controller.throttle = cap(t / ta, -1, 1) if ta != 0 and (target_speed < 1410 or t < -ta/10) else sign(t if abs(t) > 117 else target_speed)
+        agent.controller.throttle = cap(t / ta, -1, 1) if ta != 0 and (target_speed < 1410 or t < -ta * agent.delta_time * 6) else sign(t if abs(t) > 117 else target_speed)
 
         if not agent.controller.handbrake:
-            agent.controller.boost = angle_to_target < 0.5 and (t > ta / 10 + agent.boost_accel / 10 if target_speed < 1410 else t > agent.boost_accel / 10)
+            agent.controller.boost = angle_to_target < 0.5 and (t > ta * agent.delta_time * 6 + agent.boost_accel * agent.delta_time * 6 if target_speed < 1410 else t > agent.boost_accel * agent.delta_time * 6)
 
     return car_speed
 

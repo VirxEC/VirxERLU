@@ -5,12 +5,10 @@ from util.utils import (Vector, almost_equals, cap, cap_in_field, defaultDrive,
                         defaultPD, dodge_impulse, lerp, math, peek_generator,
                         side, sign)
 
-dt = 1/120
 max_speed = 2300
 throttle_accel = 66 + (2/3)
 brake_accel = Vector(x=-3500)
 boost_per_second = 33 + (1/3)
-min_boost_time = 0.1
 jump_max_duration = 0.2
 jump_speed = 291 + (2/3)
 jump_acc = 1458 + (1/3)
@@ -217,10 +215,10 @@ class double_jump:
 
             if direction == 1 and abs(agent.me.forward.dot(d_direction)) > 0.5:
                 delta_v = delta_x.dot(agent.me.forward) / T
-                if agent.me.boost > 0 and delta_v >= agent.boost_accel * min_boost_time:
+                if agent.me.boost > 0 and delta_v >= agent.boost_accel * 0.1:
                     agent.controller.boost = True
                 else:
-                    agent.controller.throttle = cap(delta_v / (throttle_accel * min_boost_time), -1, 1)
+                    agent.controller.throttle = cap(delta_v / (throttle_accel * 0.1), -1, 1)
 
             if T <= -0.4 or (not agent.me.airborne and self.counter == 4):
                 agent.pop()
@@ -357,18 +355,18 @@ class Aerial:
                 defaultPD(agent, target, upside_down=self.shot_vector.z < 0)
 
         # only boost/throttle if we're facing the right direction
-        if abs(agent.me.forward.dot(direction)) > 0.5 and T > 0:
+        if abs(agent.me.forward.dot(direction)) > 0.75 and T > 0:
             if T > 1 and not self.jumping: agent.controller.roll = 1 if self.shot_vector.z < 0 else -1
             # the change in velocity the bot needs to put it on an intercept course with the target
             delta_v = delta_x.dot(agent.me.forward) / T
-            if agent.me.boost > 0 and delta_v >= agent.boost_accel * min_boost_time:
+            if not self.jumping and agent.me.boost > 0 and delta_v >= agent.boost_accel * 0.1:
                 agent.controller.boost = True
-                delta_v -= agent.boost_accel * min_boost_time
+                delta_v -= agent.boost_accel * 0.1
 
-            if delta_v >= throttle_accel * min_boost_time:
-                agent.controller.throttle = cap(delta_v / (throttle_accel * min_boost_time), -1, 1)
+            if delta_v >= throttle_accel * 0.1:
+                agent.controller.throttle = cap(delta_v / (throttle_accel * 0.1), -1, 1)
 
-        if T <= -0.4 or (not self.jumping and T > 1.5 and not virxrlcu.aerial_shot_is_viable(T, agent.boost_accel, tuple(agent.gravity), agent.me.get_raw(agent), tuple(self.target))):
+        if T <= -0.2 or (not self.jumping and T > 1.5 and not virxrlcu.aerial_shot_is_viable(T, agent.boost_accel, tuple(agent.gravity), agent.me.get_raw(agent), tuple(self.target))):
             agent.pop()
             agent.shooting = False
             agent.push(ball_recovery())
@@ -400,9 +398,9 @@ class flip:
         else:
             elapsed = agent.time - self.time
 
-        if elapsed < 0.075:
+        if elapsed < 0.09:
             agent.controller.jump = True
-        elif elapsed >= 0.075 and self.counter < 3:
+        elif elapsed >= 0.09 and self.counter < 3:
             agent.controller.jump = False
             self.counter += 1
         elif elapsed < 0.4 or (not self.cancel and elapsed < 0.9):
@@ -588,31 +586,44 @@ class retreat:
             ball = Vector(agent.ball.location.x, agent.ball.location.y * side(agent.team) + 640)
 
         return ball
+    
+    @staticmethod
+    def friend_near_target(agent: VirxERLU, target):
+        for car in agent.friends:
+            if car.location.dist(target) < 400:
+                return True
+        return False
 
     def get_target(self, agent: VirxERLU, ball=None):
         target = None
         if ball is None:
             ball = self.get_ball_loc(agent)
+        self_team = side(agent.team)
 
-        team_to_ball = [car.location.flat_dist(ball) for car in agent.friends if car.location.y * side(agent.team) >= ball.y - 50 and abs(car.location.x) < abs(ball.x)]
-        self_to_ball = agent.me.location.flat_dist(ball)
-        team_to_ball.append(self_to_ball)
-        team_to_ball.sort()
+        if ball.y < -640:
+            target = agent.friend_goal.location
+        elif agent.me.location.y * side(agent.team) < ball.y and ball.y < 4500:
+            self_side = sign(agent.me.location.x)
+            target = agent.friend_goal.right_post if self_side == sign(agent.friend_goal.right_post.x) else agent.friend_goal.left_post
+        elif ball.x * self_team < agent.friend_goal.right_post.x * self_team:
+            target = agent.friend_goal.right_post
 
-        if agent.me.location.y * side(agent.team) >= ball.y - 50 and abs(agent.me.location.x) < abs(ball.x):
-            if len(agent.friends) == 0 or abs(ball.x) < 900 or team_to_ball[-1] is self_to_ball:
-                target = agent.friend_goal.location
-            elif team_to_ball[0] is self_to_ball:
-                target = agent.friend_goal.right_post if ball.x * side(agent.team) > 0 else agent.friend_goal.left_post
+            while self.friend_near_target(agent, target):
+                target.x = (target.x * self_team + 150 * self_team) * self_team
+        elif ball.x * self_team > agent.friend_goal.left_post.x * self_team:
+            target = agent.friend_goal.left_post
 
-        if target is None:
-            if len(agent.friends) <= 1:
-                target = agent.friend_goal.location
-            else:
-                target = agent.friend_goal.left_post if ball.x * side(agent.team) > 0 else agent.friend_goal.right_post
+            while self.friend_near_target(agent, target):
+                target.x = (target.x * self_team - 150 * self_team) * self_team
+        else:
+            target = agent.friend_goal.location
+            target.x = ball.x
+
+            while self.friend_near_target(agent, target):
+                target.x = (target.x * self_team - 150 * sign(ball.x) * self_team) * self_team
 
         target = target.copy()
-        target.y += 250 * side(agent.team) if len(agent.friends) == 0 or abs(ball.x) < 900 or team_to_ball[-1] is self_to_ball else -245 * side(agent.team)
+        target.y += 250 * side(agent.team) if abs(target.x) < 800 else -245 * side(agent.team)
 
         return target.flatten()
 
@@ -819,12 +830,12 @@ class jump_shot:
 
             if direction == 1 and abs(agent.me.forward.dot(d_direction)) > 0.5 and self.counter < 3:
                 delta_v = delta_x.dot(agent.me.forward) / T
-                if agent.me.boost > 0 and delta_v >= agent.boost_accel * min_boost_time:
+                if agent.me.boost > 0 and delta_v >= agent.boost_accel * 0.1:
                     agent.controller.boost = True
-                    delta_v -= agent.boost_accel * min_boost_time
+                    delta_v -= agent.boost_accel * 0.1
 
-                if abs(delta_v) > throttle_accel * min_boost_time:
-                    agent.controller.throttle = cap(delta_v / (throttle_accel * min_boost_time), -1, 1)
+                if abs(delta_v) > throttle_accel * 0.1:
+                    agent.controller.throttle = cap(delta_v / (throttle_accel * 0.1), -1, 1)
 
             if T <= -0.8 or (not agent.me.airborne and self.counter >= 3):
                 agent.pop()
@@ -834,7 +845,7 @@ class jump_shot:
                 agent.push(recovery())
                 return
             else:
-                if self.counter == 3 and agent.me.location.dist(self.offset_target) < (92.75 + agent.me.hitbox.length) * 1.02:
+                if self.counter == 3 and agent.me.location.dist(agent.ball.location - (self.shot_vector * agent.best_shot_value)) < (92.75 + agent.me.hitbox.length) * 1.02 and T <= 0.05:
                     # Get the required pitch and yaw to flip correctly
                     vector = agent.me.local_location(self.offset_target).flatten().normalize()
                     self.p = -vector.x

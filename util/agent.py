@@ -3,6 +3,7 @@ from __future__ import annotations
 import itertools
 import math
 import os
+import re
 from datetime import datetime
 from time import time_ns
 from traceback import print_exc
@@ -22,6 +23,7 @@ class VirxERLU(StandaloneBot):
     def initialize_agent(self):
         self.tournament = False
         self.startup_time = time_ns()
+        self.true_name = re.split(r' \(\d+\)$', self.name)[0]
 
         self.debug = [[], []]
         self.debugging = not self.tournament
@@ -119,6 +121,7 @@ class VirxERLU(StandaloneBot):
         self.shooting = False
         self.best_shot_value = 92.75
         self.odd_tick = -1
+        self.delta_time = 1 / 120
 
         self.future_ball_location_slice = 180
         self.balL_prediction_struct = None
@@ -221,6 +224,7 @@ class VirxERLU(StandaloneBot):
         self.me.update(packet)
         self.game.update(self.team, packet)
 
+        self.delta_time = self.game.time - self.time
         self.time = self.game.time
         self.gravity = self.game.gravity
 
@@ -315,6 +319,9 @@ class VirxERLU(StandaloneBot):
                         self.line(top_back_right, top_front_right, hitbox_color)
 
                     if self.debug_2d_bool:
+                        if self.delta_time != 0:
+                            self.debug[1].insert(0, f"TPS: {round(1 / self.delta_time)}")
+
                         if not self.is_clear() and self.stack[0].__class__.__name__ in {'Aerial', 'jump_shot', 'ground_shot', 'double_jump'}:
                             self.dbg_2d(round(self.stack[0].intercept_time - self.time, 4))
 
@@ -348,7 +355,7 @@ class VirxERLU(StandaloneBot):
 
 class car_object:
     # The carObject, and kin, convert the gametickpacket in something a little friendlier to use,
-    # and are updated by GoslingAgent as the game runs
+    # and are updated by VirxERLU as the game runs
     def __init__(self, index, packet=None):
         self.location = Vector()
         self.orientation = Matrix3()
@@ -364,12 +371,22 @@ class car_object:
 
         if packet is not None:
             car = packet.game_cars[self.index]
+
+            self.name = car.name
+            self.true_name = re.split(r' \(\d+\)$', self.name)[0]
+            self.team = car.team
             self.hitbox = hitbox_object(car.hitbox.length, car.hitbox.width, car.hitbox.height, Vector(car.hitbox_offset.x, car.hitbox_offset.y, car.hitbox_offset.z))
             self.offset = self.hitbox.offset  # please use self.hitbox.offset and not self.offset
+            
             self.update(packet)
-        else:
-            self.hitbox = hitbox_object()
-            self.offset = self.hitbox.offset
+
+            return
+
+        self.name = None
+        self.true_name = None
+        self.team = -1
+        self.hitbox = hitbox_object()
+        self.offset = self.hitbox.offset
 
     def local(self, value):
         # Generic localization
@@ -451,6 +468,21 @@ class hitbox_object:
 
     def __getitem__(self, index):
         return (self.length, self.width, self.height)[index]
+
+
+class last_touch:
+    def __init__(self):
+        self.location = Vector()
+        self.normal = Vector()
+        self.time = -1
+        self.car = None
+    
+    def update(self, packet):
+        touch = packet.game_ball.latest_touch
+        self.location = touch.hit_location
+        self.normal = touch.hit_normal
+        self.time = touch.time_seconds
+        self.car = car_object(touch.player_index, packet)
 
 
 class ball_object:
