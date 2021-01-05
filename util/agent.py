@@ -10,10 +10,14 @@ from traceback import print_exc
 from typing import List, Tuple
 
 import numpy as np
-from gui import Gui
-from match_comms import MatchComms
 from rlbot.agents.base_agent import SimpleControllerState
 from rlbot.agents.standalone.standalone_bot import StandaloneBot, run_bot
+
+TOURNAMENT_MODE = True
+
+if not TOURNAMENT_MODE:
+    from gui import Gui
+    from match_comms import MatchComms
 
 
 class VirxERLU(StandaloneBot):
@@ -21,7 +25,7 @@ class VirxERLU(StandaloneBot):
     # VirxERLU on VirxEC Showcase -> https://virxerlu.virxcase.dev/
     # Wiki -> https://github.com/VirxEC/VirxERLU/wiki
     def initialize_agent(self):
-        self.tournament = False
+        self.tournament = TOURNAMENT_MODE
         self.startup_time = time_ns()
         self.true_name = re.split(r' \(\d+\)$', self.name)[0]
 
@@ -49,9 +53,10 @@ class VirxERLU(StandaloneBot):
             self.print("Starting the GUI...")
             self.gui.start()
 
-        self.match_comms = MatchComms(self)
-        self.print("Starting the match communication handler...")
-        self.match_comms.start()
+            if self.matchcomms_root is not None:
+                self.match_comms = MatchComms(self)
+                self.print("Starting the match communication handler...")
+                self.match_comms.start()
 
         self.print("Building game information")
 
@@ -131,13 +136,13 @@ class VirxERLU(StandaloneBot):
         if not self.tournament:
             self.gui.stop()
 
-        self.match_comms.stop()
+            if self.matchcomms_root is not None:
+                self.match_comms.stop()
 
-    @staticmethod
-    def is_hot_reload_enabled():
+    def is_hot_reload_enabled(self):
         # The tkinter GUI isn't compatible with hot reloading
-        # Use the Continue and Spawn option in the GUI instead
-        return False
+        # Use the Continue and Spawn option in the RLBotGUI instead
+        return self.tournament
 
     def get_ready(self, packet):
         field_info = self.get_field_info()
@@ -244,6 +249,18 @@ class VirxERLU(StandaloneBot):
             self.odd_tick = 0
 
         self.ball_prediction_struct = self.get_ball_prediction_struct()
+
+        if self.tournament and self.matchcomms_root is not None:
+            while 1:
+                try:
+                    msg = self.agent.matchcomms.incoming_broadcast.get_nowait()
+                except Exception:
+                    break
+                
+                try:
+                    self.handle_match_comm(msg)
+                except Exception:
+                    print_exc()
 
     def get_output(self, packet):
         try:
