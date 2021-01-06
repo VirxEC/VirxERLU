@@ -13,7 +13,11 @@ import numpy as np
 from rlbot.agents.base_agent import SimpleControllerState
 from rlbot.agents.standalone.standalone_bot import StandaloneBot, run_bot
 
-TOURNAMENT_MODE = True
+# If you're putting your bot in the botpack, or submitting to a tournament, make this True!
+TOURNAMENT_MODE = False
+
+# Make False to enable hot reloading, at the cost of the GUI
+EXTRA_DEBUGGING = True
 
 if not TOURNAMENT_MODE:
     from gui import Gui
@@ -26,6 +30,7 @@ class VirxERLU(StandaloneBot):
     # Wiki -> https://github.com/VirxEC/VirxERLU/wiki
     def initialize_agent(self):
         self.tournament = TOURNAMENT_MODE
+        self.extra_debugging = EXTRA_DEBUGGING
         self.startup_time = time_ns()
         self.true_name = re.split(r' \(\d+\)$', self.name)[0]
 
@@ -48,7 +53,7 @@ class VirxERLU(StandaloneBot):
             f"-traceback ({T}).txt"
         )
 
-        if not self.tournament:
+        if not self.tournament and self.extra_debugging:
             self.gui = Gui(self)
             self.print("Starting the GUI...")
             self.gui.start()
@@ -133,7 +138,7 @@ class VirxERLU(StandaloneBot):
 
     def retire(self):
         # Stop the currently running threads
-        if not self.tournament:
+        if not self.tournament and self.extra_debugging:
             self.gui.stop()
 
             if self.matchcomms_root is not None:
@@ -142,7 +147,7 @@ class VirxERLU(StandaloneBot):
     def is_hot_reload_enabled(self):
         # The tkinter GUI isn't compatible with hot reloading
         # Use the Continue and Spawn option in the RLBotGUI instead
-        return self.tournament
+        return not self.extra_debugging
 
     def get_ready(self, packet):
         field_info = self.get_field_info()
