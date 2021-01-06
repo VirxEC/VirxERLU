@@ -19,7 +19,7 @@ TOURNAMENT_MODE = False
 # Make False to enable hot reloading, at the cost of the GUI
 EXTRA_DEBUGGING = True
 
-if not TOURNAMENT_MODE:
+if not EXTRA_DEBUGGING:
     from gui import Gui
     from match_comms import MatchComms
 
