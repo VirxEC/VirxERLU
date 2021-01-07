@@ -14,12 +14,12 @@ from rlbot.agents.base_agent import SimpleControllerState
 from rlbot.agents.standalone.standalone_bot import StandaloneBot, run_bot
 
 # If you're putting your bot in the botpack, or submitting to a tournament, make this True!
-TOURNAMENT_MODE = False
+TOURNAMENT_MODE = True
 
 # Make False to enable hot reloading, at the cost of the GUI
-EXTRA_DEBUGGING = True
+EXTRA_DEBUGGING = False
 
-if not EXTRA_DEBUGGING:
+if not TOURNAMENT_MODE and EXTRA_DEBUGGING:
     from gui import Gui
     from match_comms import MatchComms
 
