@@ -1,2 +1,2 @@
-VirxERLU-CLib>=1.12.0
+VirxERLU-CLib>=1.13.0,<2.0.0
 numpy

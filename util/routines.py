@@ -133,7 +133,7 @@ class double_jump:
 
             # The adjustment causes the car to circle around the dodge point in an effort to line up with the shot vector
             # The adjustment slowly decreases to 0 as the bot nears the time to jump
-            adjustment = car_to_offset_target.angle2D(self.shot_vector) * Tj * 500  # size of adjustment
+            adjustment = car_to_offset_target.angle2D(self.shot_vector) * Tj * 1000  # size of adjustment
             # we don't adjust the final target if we are already jumping
             final_target += car_to_dodge_perp.normalize() * adjustment
 
@@ -750,7 +750,7 @@ class jump_shot:
 
             # The adjustment causes the car to circle around the dodge point in an effort to line up with the shot vector
             # The adjustment slowly decreases to 0 as the bot nears the time to jump
-            adjustment = car_to_offset_target.angle2D(self.shot_vector) * Tj * 500  # size of adjustment
+            adjustment = car_to_offset_target.angle2D(self.shot_vector) * Tj * 1000  # size of adjustment
             final_target += car_to_offset_perp.normalize() * adjustment
 
         distance_remaining = final_target.flat_dist(agent.me.location)
@@ -927,7 +927,7 @@ class ground_shot:
 
                 # The adjustment causes the car to circle around the dodge point in an effort to line up with the shot vector
                 # The adjustment slowly decreases to 0 as the bot nears the time to jump
-                adjustment = car_to_offset_target.angle2D(self.shot_vector) * T * 500  # size of adjustment
+                adjustment = car_to_offset_target.angle2D(self.shot_vector) * T * 1000  # size of adjustment
                 # we don't adjust the final target if we are already jumping
                 final_target += car_to_offset_perp.normalize() * adjustment
 
