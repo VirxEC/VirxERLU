@@ -1104,17 +1104,18 @@ class short_shot:
 
         if velocity == 0: velocity = 1
 
+        time = distance_remaining / (velocity + dodge_impulse(agent))
         if abs(angles[1]) < 0.05 and (eta < 0.45 or distance < 150):
             agent.pop()
             agent.shooting = False
             agent.shot_weight = -1
             agent.shot_time = -1
             agent.push(flip(agent.me.local(car_to_ball)))
-        elif agent.boost_amount != 'unlimited' and agent.me.location.z < 50 and agent.me.boost < 48 and angle_to_target < 0.03 and velocity > 500 and T > 1 and time >= T + 1.5:
+        elif agent.boost_amount != 'unlimited' and agent.me.location.z < 50 and agent.me.boost < 48 and angle_to_target < 0.03 and velocity > 500 and time >= 1.5:
             speed_gain_routine = wave_dash if agent.gravity.z < -450 and time < 3 and time > 1 else flip
-            agent.push(speed_gain_routine(agent.me.local_location(self.target)))
-        elif agent.boost_amount != 'unlimited' and agent.me.location.z < 50 and direction == -1 and velocity < 200 and time >= T + 1.5:
-            agent.push(flip(agent.me.local_location(self.target), True))
+            agent.push(speed_gain_routine(agent.me.local_location(agent.ball.location)))
+        elif agent.boost_amount != 'unlimited' and agent.me.location.z < 50 and direction == -1 and velocity < 200 and time >= 1.5:
+            agent.push(flip(agent.me.local_location(agent.ball.location), True))
 
 class boost_down:
     def __init__(self):
