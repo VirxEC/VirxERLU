@@ -1,2 +1,4 @@
-VirxERLU-CLib>=1.13.0,<2.0.0
+pip
 numpy
+rlbot
+VirxERLU-CLib>=1.14.0,<2.0.0
