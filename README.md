@@ -40,4 +40,4 @@ The wiki is the best way to get general information about VirxERLU.
 If you're going to use VirxERLU, be sure to watch the GoslingUtils tutorial first. The VirxERLU tutorial is only for the differences between the utils.
 
 + RLBot/GoslingUtils tutorial: [youtube.com/watch?v=lPkID_IH88U](https://www.youtube.com/watch?v=lPkID_IH88U)
-+ VirxERLU tutorial: [youtube.com/watch?v=UpwiAgcAKgs](https://www.youtube.com/watch?v=UpwiAgcAKgs)
++ VirxERLU tutorials: [youtube.com/playlist?list=PLeo0zkmzSE-UUFV-bd2vWtqiqe2cjaQNf](https://www.youtube.com/playlist?list=PLeo0zkmzSE-UUFV-bd2vWtqiqe2cjaQNf)
