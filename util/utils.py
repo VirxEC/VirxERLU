@@ -2,6 +2,10 @@ from queue import Full
 
 from util.agent import Vector, math
 
+COAST_ACC = 525.0
+BREAK_ACC = 3500
+MIN_BOOST_TIME = 0.1
+
 
 def cap(x, low, high):
     # caps/clamps a number between a low and high value
@@ -57,11 +61,16 @@ def defaultThrottle(agent, target_speed, target_angles=None, local_target=None):
                 agent.controller.steer = agent.controller.yaw
 
         t = target_speed - car_speed
-        ta = throttle_acceleration(car_speed)
-        agent.controller.throttle = cap(t / ta, -1, 1) if ta != 0 and (target_speed < 1410 or t < -ta * agent.delta_time * 6) else sign(t if abs(t) > 117 else target_speed)
+        ta = throttle_acceleration(abs(car_speed)) * agent.delta_time
+        if car_speed <= 1410:
+            agent.controller.throttle = cap(t / ta, -1, 1)
+        elif sign(target_speed) * t > -COAST_ACC * agent.delta_time:
+            agent.controller.throttle = sign(target_speed)
+        elif sign(target_speed) * t <= -COAST_ACC * agent.delta_time:
+            agent.controller.throttle = sign(t)
 
         if not agent.controller.handbrake:
-            agent.controller.boost = angle_to_target < 0.5 and (t > ta * agent.delta_time * 6 + agent.boost_accel * agent.delta_time * 6 if target_speed < 1410 else t > agent.boost_accel * agent.delta_time * 6)
+            agent.controller.boost = abs(target_angles[1]) < 0.5 and t - ta >= agent.boost_accel * MIN_BOOST_TIME / 4
 
     return car_speed
 
@@ -80,10 +89,10 @@ def throttle_acceleration(car_velocity_x):
 
     # use y = mx + b to find the throttle acceleration
     if x < 1400:
-        return (-36 / 35) * x + 1600;
+        return (-36 / 35) * x + 1600
 
-    x -= 1400;
-    return -16 * x + 160;
+    x -= 1400
+    return -16 * x + 160
 
 
 def is_inside_turn_radius(turn_rad, local_target, steer_direction):
