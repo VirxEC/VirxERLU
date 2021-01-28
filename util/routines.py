@@ -133,10 +133,10 @@ class double_jump:
 
             # The adjustment causes the car to circle around the dodge point in an effort to line up with the shot vector
             # The adjustment slowly decreases to 0 as the bot nears the time to jump
-            adjustment = car_to_offset_target.angle2D(self.shot_vector) * min(Tj, 3) * 1000  # size of adjustment
+            adjustment = car_to_offset_target.angle2D(self.shot_vector) * min(Tj, 3) * 750  # size of adjustment
             final_target += car_to_dodge_perp.normalize() * adjustment
 
-        distance_remaining = final_target.flat_dist(agent.me.location)
+        distance_remaining = self.offset_target.flat_dist(agent.me.location)
 
         # Some adjustment to the final target to ensure it's inside the field and we don't try to drive through any goalposts or walls to reach it
         final_target = cap_in_field(agent, final_target)
@@ -155,6 +155,7 @@ class double_jump:
 
         distance_remaining = agent.me.local_location(self.offset_target).x if agent.me.airborne else distance_remaining
         distance_remaining -= agent.me.hitbox.length * 0.45
+        distance_remaining = max(distance_remaining, 0)
         speed_required = distance_remaining / time_remaining
         agent.dbg_2d(f"Speed required: {round(speed_required, 2)}")
 
@@ -269,7 +270,6 @@ class Aerial:
         vf = agent.me.velocity + agent.gravity * T
 
         slice_n = math.ceil(T * 60) - 1
-        agent.dbg_2d(f"Shot slice #: {slice_n}")
 
         if (T > 0.1 and agent.odd_tick % 2 == 0) or self.ball is None:
             ball = agent.ball_prediction_struct.slices[slice_n].physics.location
@@ -284,10 +284,10 @@ class Aerial:
         if self.ceiling:
             self.target -= Vector(z=agent.ball_radius)
 
-        if self.jumping or not agent.me.airborne:
+        if self.jumping or self.jump_time == -1:
             agent.dbg_2d("Jumping")
 
-            if not self.jumping or not agent.me.airborne:
+            if not self.jumping or self.jump_time == -1:
                 self.jump_type_fast = self.fast_aerial
                 self.jumping = True
                 self.jump_time = agent.time
@@ -362,15 +362,16 @@ class Aerial:
             if abs(delta_v) >= throttle_accel * agent.delta_time:
                 agent.controller.throttle = cap(delta_v / (throttle_accel * agent.delta_time), -1, 1)
 
-        if T <= -0.2 or (not self.jumping and T > 1.5 and not virxrlcu.aerial_shot_is_viable(T, agent.boost_accel, tuple(agent.gravity), agent.me.get_raw(agent), tuple(self.target))):
+        if T <= -0.2 or (not self.jumping and not agent.me.airborne) or (not self.jumping and T > 1.5 and not virxrlcu.aerial_shot_is_viable(T, agent.boost_accel, tuple(agent.gravity), agent.me.get_raw(agent), tuple(self.target))):
             agent.pop()
             agent.shooting = False
             agent.push(ball_recovery())
         elif (self.ceiling and self.target.dist(agent.me.location) < agent.ball_radius + agent.me.hitbox.length and not agent.me.doublejumped and agent.me.location.z < agent.ball.location.z + agent.ball_radius and self.target.y * side(agent.team) > -4240) or (not self.ceiling and not agent.me.doublejumped and T < 0.1):
             agent.dbg_2d("Flipping")
-            local_target = agent.me.local_location(self.target).flatten().normalize()
-            agent.controller.pitch = -local_target.x
-            agent.controller.yaw = local_target.y
+            vector = agent.me.local_location(self.target).flatten().normalize()
+            scale = 1 / max(abs(vector.x), abs(vector.y))
+            self.p = cap(-vector.x * scale, -1, 1)
+            self.y = cap(vector.y * scale, -1, 1)
             agent.controller.jump = True
 
 
@@ -378,10 +379,12 @@ class flip:
     # Flip takes a vector in local coordinates and flips/dodges in that direction
     # cancel causes the flip to cancel halfway through, which can be used to half-flip
     def __init__(self, vector, cancel=False):
-        vector = vector.flatten().normalize()
-        self.pitch = -vector.x
-        self.yaw = vector.y
+        vector = vector.flatten().normalize().normalize()
+        scale = 1 / max(abs(vector.x), abs(vector.y))
+        self.pitch = cap(-vector.x * scale, -1, 1)
+        self.yaw = cap(vector.y * scale, -1, 1)
         self.cancel = cancel
+
         # the time the jump began
         self.time = -1
         # keeps track of the frames the jump button has been released
@@ -487,9 +490,9 @@ class goto:
 
         if agent.me.airborne:
             agent.push(recovery(self.target))
-        elif agent.boost_amount != 'unlimited' and agent.me.boost < 60 and angle_to_target < 0.03 and velocity > 500 and time > 1:
+        elif agent.boost_amount != 'unlimited' and agent.me.boost < 60 and angle_to_target < 0.03 and velocity > 500 and time > 1.5:
             agent.push(flip(agent.me.local_location(self.target)))
-        elif agent.boost_amount != 'unlimited' and direction == -1 and velocity < 200 and time > 1.25:
+        elif agent.boost_amount != 'unlimited' and direction == -1 and velocity < 200 and time > 1.5:
             agent.push(flip(agent.me.local_location(self.target), True))
 
 
@@ -753,28 +756,27 @@ class jump_shot:
 
             # The adjustment causes the car to circle around the dodge point in an effort to line up with the shot vector
             # The adjustment slowly decreases to 0 as the bot nears the time to jump
-            adjustment = car_to_offset_target.angle2D(self.shot_vector) * cap(Tj, 0.5, 3) * 1000  # size of adjustment
+            adjustment = car_to_offset_target.angle2D(self.shot_vector) * cap(Tj, 0.5, 3) * 750  # size of adjustment
             final_target += car_to_offset_perp.normalize() * adjustment
 
-        distance_remaining = final_target.flat_dist(agent.me.location)
+        distance_remaining = self.offset_target.flat_dist(agent.me.location)
 
         # Some adjustment to the final target to ensure it's inside the field and we don't try to drive through any goalposts or walls to reach it (again)
         final_target = cap_in_field(agent, final_target)
         local_final_target = agent.me.local_location(final_target)
 
         # whether we should go forwards or backwards
-        angle_to_target = abs(Vector(x=1).angle2D(local_final_target))
+        angle_to_target = abs(Vector(x=1).angle2D(agent.me.local_location(agent.ball.location) if self.jumping else local_final_target))
         direction = 1 if angle_to_target < 1.6 or agent.me.local_velocity().x > 1000 else -1
 
         # drawing debug lines to show the dodge point and final target (which differs due to the adjustment)
         agent.line(agent.me.location, self.offset_target, agent.renderer.white())
-        agent.line(self.offset_target-Vector(z=100), self.offset_target+Vector(z=100), agent.renderer.green())
-        agent.line(final_target-Vector(z=100), final_target+Vector(z=100), agent.renderer.purple())
+        agent.line(self.offset_target-Vector(z=agent.ball_radius), self.offset_target+Vector(z=agent.ball_radius), agent.renderer.green())
+        agent.line(final_target-Vector(z=agent.ball_radius), final_target+Vector(z=agent.ball_radius), agent.renderer.purple())
 
         vf = agent.me.velocity + agent.gravity * T
 
-        distance_remaining = agent.me.local_location(self.offset_target).x if agent.me.airborne else distance_remaining
-        distance_remaining -= agent.me.hitbox.length * 0.45
+        distance_remaining = max((agent.me.local_location(self.offset_target).x if self.jumping else distance_remaining) - agent.me.hitbox.length * 0.45, 0)
         speed_required = distance_remaining / time_remaining
         agent.dbg_2d(f"Speed required: {round(speed_required, 2)}")
 
@@ -852,9 +854,10 @@ class jump_shot:
                 local_flip_target = agent.ball.location - (self.shot_vector * agent.ball_radius)
                 if self.counter == 3 and agent.me.location.dist(local_flip_target) < (agent.ball_radius + agent.me.hitbox.length) * 1.02 and T <= 0.05:
                     # Get the required pitch and yaw to flip correctly
-                    vector = agent.me.local_location(local_flip_target).flatten().normalize()
-                    self.p = -vector.x
-                    self.y = vector.y
+                    vector = Vector(agent.me.local_location(agent.ball.location).x, agent.me.local_location(local_flip_target).y).normalize()
+                    scale = 1 / max(abs(vector.x), abs(vector.y))
+                    self.p = cap(-vector.x * scale, -1, 1)
+                    self.y = cap(vector.y * scale, -1, 1)
 
                     agent.controller.pitch = self.p
                     agent.controller.yaw = self.y
@@ -917,7 +920,7 @@ class ground_shot:
         car_to_ball = agent.ball.location - agent.me.location
         if abs(l_ball.y) < agent.ball_radius + agent.me.hitbox.width / 2 and abs(l_ball.z) < agent.ball_radius + agent.me.hitbox.height / 2:
             final_target = agent.ball.location - (self.shot_vector * agent.ball_radius)
-            distance_remaining = final_target.flat_dist(agent.me.location) - agent.me.hitbox.length * 0.45
+            distance_remaining = max(agent.me.local_location(final_target).x - agent.me.hitbox.length * 0.45, 0)
             speed_required = 2300
             agent.dbg_2d(f"Max speed")
         else:
@@ -932,11 +935,11 @@ class ground_shot:
 
                 # The adjustment causes the car to circle around the dodge point in an effort to line up with the shot vector
                 # The adjustment slowly decreases to 0 as the bot nears the time to jump
-                adjustment = car_to_offset_target.angle2D(self.shot_vector) * cap(T, 0.5, 3) * 1000  # size of adjustment
+                adjustment = car_to_offset_target.angle2D(self.shot_vector) * cap(T, 0.5, 3) * 750  # size of adjustment
                 # we don't adjust the final target if we are already jumping
                 final_target += car_to_offset_perp.normalize() * adjustment
 
-            distance_remaining = final_target.flat_dist(agent.me.location) - agent.me.hitbox.length * 0.45
+            distance_remaining = max(self.offset_target.flat_dist(agent.me.location) - agent.me.hitbox.length * 0.45, 0)
             speed_required = distance_remaining / time_remaining
             agent.dbg_2d(f"Speed required: {speed_required}")
 
@@ -967,11 +970,11 @@ class ground_shot:
 
         if T > 0.25 and T < 0.35 and (direction == -1 or abs(velocity) + dodge_impulse(agent) <= (abs(speed_required) if agent.me.boost > 24 else 1900) or self.shot_vector.angle2D((final_target - agent.me.location)) > 0.05) and ((abs(velocity) < 100 and true_distance_remaining < agent.me.hitbox.length / 2) or (abs(local_offset_target.y) < agent.ball_radius and direction * local_vf.x >= direction * (local_offset_target.x - agent.me.hitbox.length / 2) and direction * local_offset_target.x > 0)):
             agent.pop()
-            local_flip_target = agent.me.local_location(agent.ball.location - (self.shot_vector * agent.ball_radius))
+            local_flip_target = agent.me.local_location(agent.ball.location - (self.shot_vector * agent.ball_radius)) + Vector(agent.ball_radius)
             agent.push(flip(local_flip_target, cancel=abs(Vector(x=1).angle2D(local_flip_target)) > 1.6))
         elif agent.me.airborne:
             agent.push(recovery(final_target if T > 0.5 else None))
-        elif T <= 0 or (T > 0.3 and true_distance_remaining > agent.me.hitbox.length / 2 and not virxrlcu.ground_shot_is_viable(T, agent.boost_accel, agent.me.get_raw(agent), self.offset_target.z, tuple((final_target - agent.me.location).normalize()), distance_remaining)):
+        elif T <= 0 or (T > 0.75 and true_distance_remaining > agent.me.hitbox.length / 2 and not virxrlcu.ground_shot_is_viable(T, agent.boost_accel, agent.me.get_raw(agent), self.offset_target.z, tuple((final_target - agent.me.location).normalize()), distance_remaining)):
             # If we're out of time or not fast enough, we pop
             agent.pop()
             agent.shooting = False
