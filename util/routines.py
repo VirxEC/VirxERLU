@@ -159,28 +159,17 @@ class double_jump:
         distance_remaining = max(distance_remaining, 0)
         
         if self.intercept_speed is None: 
-            self.intercept_speed = (distance_remaining / time_remaining)
-            agent.print(f"INFO in {self.__class__.__name__}: No intercept speed specified, using distance_remaining / time_remaining.")
-
-        time_to_intercept_speed = virxrlcu.time_to_speed(agent.boost_accel, agent.me.local_velocity().x, agent.me.boost, self.intercept_speed)
-        
-        if time_to_intercept_speed == -1:  # this would mean that the speed is unreachable
-            if self.intercept_speed != (distance_remaining / time_remaining):
-                agent.print(f"WARNING in {self.__class__.__name__}: Requested intercept speed is unreachable. Falling back to speed distance_remaining / time_remaining.")
-                self.intercept_speed = (distance_remaining / time_remaining)
-                time_to_intercept_speed = virxrlcu.time_to_speed(agent.boost_accel, agent.me.local_velocity().x, agent.me.boost, self.intercept_speed)
-                if time_to_intercept_speed == -1:
-                    agent.print(f"WARNING in {self.__class__.__name__}: The speed distance_remaining / time_remaining is unreachable. Something is probably VERY wrong. Smart approach disabled, falling back on legacy approach")
-                    speed_required = distance_remaining / time_remaining
-            else:
-                agent.print(f"WARNING in {self.__class__.__name__}: The speed distance_remaining / time_remaining is unreachable. Something is probably VERY wrong. Smart approach disabled, falling back on legacy approach")
-                speed_required = distance_remaining / time_remaining
-                
+            speed_required = distance_remaining / time_remaining
         else:
-            if T <= time_to_intercept_speed:
-                speed_required = self.intercept_speed
+            time_to_intercept_speed = virxrlcu.time_to_speed(agent.boost_accel, agent.me.local_velocity().x, agent.me.boost, self.intercept_speed)
+            
+            if time_to_intercept_speed == -1:  # this would mean that the speed is unreachable
+                agent.pop()
             else:
-                speed_required = 1410
+                if T <= time_to_intercept_speed:
+                    speed_required = self.intercept_speed
+                else:
+                    speed_required = 1410
 
         agent.dbg_2d(f"Speed required: {round(speed_required, 2)}")
 
@@ -805,27 +794,19 @@ class jump_shot:
         distance_remaining = max((agent.me.local_location(self.offset_target).x if self.jumping else distance_remaining) - agent.me.hitbox.length * 0.45, 0)
         
         if self.intercept_speed is None: 
-            self.intercept_speed = (distance_remaining / time_remaining)
-            agent.print(f"INFO in {self.__class__.__name__}: No intercept speed specified, using distance_remaining / time_remaining.")
-
-        time_to_intercept_speed = virxrlcu.time_to_speed(agent.boost_accel, agent.me.local_velocity().x, agent.me.boost, self.intercept_speed)
-        if time_to_intercept_speed == -1:  # this would mean that the speed is unreachable
-            if self.intercept_speed != (distance_remaining / time_remaining):
-                agent.print(f"WARNING in {self.__class__.__name__}: Requested intercept speed is unreachable. Falling back to speed distance_remaining / time_remaining.")
-                self.intercept_speed = (distance_remaining / time_remaining)
-                time_to_intercept_speed = virxrlcu.time_to_speed(agent.boost_accel, agent.me.local_velocity().x, agent.me.boost, self.intercept_speed)
-                if time_to_intercept_speed == -1:
-                    agent.print(f"WARNING in {self.__class__.__name__}: The speed distance_remaining / time_remaining is unreachable. Something is probably VERY wrong. Smart approach disabled, falling back on legacy approach")
-                    speed_required = distance_remaining / time_remaining
-            else:
-                agent.print(f"WARNING in {self.__class__.__name__}: The speed distance_remaining / time_remaining is unreachable. Something is probably VERY wrong. Smart approach disabled, falling back on legacy approach")
-                speed_required = distance_remaining / time_remaining
-                
+            speed_required = distance_remaining / time_remaining
         else:
-            if T <= time_to_intercept_speed:
-                speed_required = self.intercept_speed
+            time_to_intercept_speed = virxrlcu.time_to_speed(agent.boost_accel, agent.me.local_velocity().x, agent.me.boost, self.intercept_speed)
+            
+            if time_to_intercept_speed == -1:  # this would mean that the speed is unreachable
+                agent.pop()
             else:
-                speed_required = 1410
+                if T <= time_to_intercept_speed:
+                    speed_required = self.intercept_speed
+                else:
+                    speed_required = 1410
+
+            agent.dbg_2d(f"Speed required: {speed_required}")
 
         agent.dbg_2d(f"Speed required: {round(speed_required, 2)}")
 
@@ -992,28 +973,17 @@ class ground_shot:
             distance_remaining = max(self.offset_target.flat_dist(agent.me.location) - agent.me.hitbox.length * 0.45, 0)
 
             if self.intercept_speed is None: 
-                self.intercept_speed = (distance_remaining / time_remaining)
-                agent.print(f"INFO in {self.__class__.__name__}: No intercept speed specified, using distance_remaining / time_remaining.")
-
-            time_to_intercept_speed = virxrlcu.time_to_speed(agent.boost_accel, agent.me.local_velocity().x, agent.me.boost, self.intercept_speed)
-
-            if time_to_intercept_speed == -1:  # this would mean that the speed is unreachable
-                if self.intercept_speed != (distance_remaining / time_remaining):
-                    agent.print(f"WARNING in {self.__class__.__name__}: Requested intercept speed is unreachable. Falling back to speed distance_remaining / time_remaining.")
-                    self.intercept_speed = (distance_remaining / time_remaining)
-                    time_to_intercept_speed = virxrlcu.time_to_speed(agent.boost_accel, agent.me.local_velocity().x, agent.me.boost, self.intercept_speed)
-                    if time_to_intercept_speed == -1:
-                        agent.print(f"WARNING in {self.__class__.__name__}: The speed distance_remaining / time_remaining is unreachable. Something is probably VERY wrong. Smart approach disabled, falling back on legacy approach")
-                        speed_required = distance_remaining / time_remaining
-                else:
-                    agent.print(f"WARNING in {self.__class__.__name__}: The speed distance_remaining / time_remaining is unreachable. Something is probably VERY wrong. Smart approach disabled, falling back on legacy approach")
-                    speed_required = distance_remaining / time_remaining
-                    
+                speed_required = distance_remaining / time_remaining
             else:
-                if T <= time_to_intercept_speed:
-                    speed_required = self.intercept_speed
+                time_to_intercept_speed = virxrlcu.time_to_speed(agent.boost_accel, agent.me.local_velocity().x, agent.me.boost, self.intercept_speed)
+
+                if time_to_intercept_speed == -1:  # this would mean that the speed is unreachable
+                    agent.pop()
                 else:
-                    speed_required = 1410
+                    if T <= time_to_intercept_speed:
+                        speed_required = self.intercept_speed
+                    else:
+                        speed_required = 1410
 
             agent.dbg_2d(f"Speed required: {speed_required}")
             
