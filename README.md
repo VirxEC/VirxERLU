@@ -1,6 +1,6 @@
 # VirxERLU
 
-Big thanks to ddthj/GoslingUtils for the basis of VirxERLU. This version, however, improves upon many things, including pathfinding, finding shots, and aerials. This also improves on the general performance of the agent.
+Big thanks to ddthj/GoslingUtils for the basis of VirxERLU. However, VirxERLU improves upon many things. This includes pathfinding, shot validation, and aerials. It also adds many things, like support for TMCP and a GUI for debugging. This also improves on the general performance of the agent.
 
 + [RLBot](http://www.rlbot.org/)
 + [VirxERLU Wiki](https://github.com/VirxEC/VirxERLU/wiki)
