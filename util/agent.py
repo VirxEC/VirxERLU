@@ -139,6 +139,7 @@ class VirxERLU(StandaloneBot):
         self.shooting = False
         self.odd_tick = -1
         self.delta_time = 1 / 120
+        self.last_sent_tmcp_packet = None
 
         self.future_ball_location_slice = 180
         self.balL_prediction_struct = None
@@ -270,7 +271,11 @@ class VirxERLU(StandaloneBot):
                     break
                 
                 try:
-                    self.handle_match_comm(msg)
+                    if msg.get('tmcp_version') is not None:
+                        if msg.get("team") == self.team and msg.get("index") != self.index:
+                            self.handle_tmcp_packet(msg)
+                    else:
+                        self.handle_match_comm(msg)
                 except Exception:
                     print_exc()
 
@@ -300,6 +305,19 @@ class VirxERLU(StandaloneBot):
                 except Exception:
                     t_file = os.path.join(self.traceback_file[0], self.name+self.traceback_file[1])
                     print(f"ERROR in {self.name}; see '{t_file}'")
+                    print_exc(file=open(t_file, "a"))
+
+                try:
+                    tmcp_packet = self.create_tmcp_packet()
+
+                    # if we haven't sent a packet, OR
+                    # the last packet we sent isn't out current packet AND either the action types are different OR either the time difference is greater than 0.1 or target is different
+                    if self.last_sent_tmcp_packet is None or (self.last_sent_tmcp_packet != tmcp_packet and (self.last_sent_tmcp_packet["action"]["type"] != tmcp_packet["action"]["type"] or (abs(self.last_sent_tmcp_packet["action"]["time"] - tmcp_packet["action"]["time"]) >= 0.1 if tmcp_packet["action"].get("target") is None else self.last_sent_tmcp_packet["action"]["target"] != tmcp_packet["action"]["target"]))):
+                        self.matchcomms.outgoing_broadcast.put_nowait(tmcp_packet)
+                        self.last_sent_tmcp_packet = tmcp_packet
+                except Exception:
+                    t_file = os.path.join(self.traceback_file[0], self.name+"-TMCP"+self.traceback_file[1])
+                    print(f"ERROR in {self.name} with sending TMCP packet; see '{t_file}'")
                     print_exc(file=open(t_file, "a"))
 
                 # run the routine on the end of the stack
@@ -369,6 +387,46 @@ class VirxERLU(StandaloneBot):
             print_exc(file=open(t_file, "a"))
             return SimpleControllerState()
 
+    def create_tmcp_packet(self):
+        # https://github.com/RLBot/RLBot/wiki/Team-Match-Communication-Protocol
+
+        packet = {
+            "tmcp_version": [0,5],
+            "index": self.index,
+            "team": self.team,
+            "action": {}
+        }
+
+        if self.is_clear():
+            packet["action"] = { "type": "WAIT" }
+            return packet
+        
+        stack_routine_name = self.stack[0].__class__.__name__
+
+        if stack_routine_name in {'Aerial', 'jump_shot', 'ground_shot', 'double_jump', 'short_shot'}:
+            packet["action"] = {
+                "type": "BALL",
+                "time": -1 if stack_routine_name == 'short_shot' else self.stack[0].intercept_time
+            }
+        elif stack_routine_name == "goto_boost":
+            packet["action"] = {
+                "type": "BOOST",
+                "target": self.stack[0].boost.index
+            }
+        else:
+            # by default, VirxERLU can't demo bots
+            packet["action"] = { "type": "WAIT" }
+
+        # don't worry about duplicate packets - this is handled automatically
+        return packet
+
+    def handle_tmcp_packet(self, packet):
+        # https://github.com/RLBot/RLBot/wiki/Team-Match-Communication-Protocol
+
+        for friend in self.friends:
+            if friend.index == packet['index']:
+                friend.tmcp_action = packet['action']
+
     def handle_match_comm(self, msg):
         pass
 
@@ -398,6 +456,7 @@ class car_object:
         self.doublejumped = False
         self.boost = 0
         self.index = index
+        self.tmcp_action = None
 
         if packet is not None:
             car = packet.game_cars[self.index]

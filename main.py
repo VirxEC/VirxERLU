@@ -130,6 +130,11 @@ class Bot(VirxERLU):
             # Clear the stack
             self.clear()
 
+    def handle_tmcp_packet(self, packet):
+        super().handle_tmcp_packet(packet)
+
+        self.print(packet)
+
     def handle_match_comm(self, msg):
         # NOTE This is for handling any incoming match communications
 
