@@ -402,7 +402,7 @@ class VirxERLU(StandaloneBot):
         if self.last_sent_tmcp_packet["action"]["type"] != action_type:
             return True
 
-        if action_type == "BALL":
+        if action_type == "BALL" or action_type == "READY":
             return abs(self.last_sent_tmcp_packet["action"]["time"] - tmcp_packet["action"]["time"]) >= 0.1
 
         if action_type == "BOOST":
@@ -411,9 +411,6 @@ class VirxERLU(StandaloneBot):
         if action_type == "DEMO":
             return abs(self.last_sent_tmcp_packet["action"]["time"] - tmcp_packet["action"]["time"]) >= 0.1 or self.last_sent_tmcp_packet["action"]["target"] != tmcp_packet["action"]["target"]
 
-        if action_type == "WAIT":
-            return abs(self.last_sent_tmcp_packet["action"]["ready"] - tmcp_packet["action"]["ready"]) >= 0.1
-
         # Right now, this is only for DEFEND
         return False
 
@@ -421,7 +418,7 @@ class VirxERLU(StandaloneBot):
         # https://github.com/RLBot/RLBot/wiki/Team-Match-Communication-Protocol
         # don't worry about duplicate packets - this is handled automatically
         return {
-            "tmcp_version": [0,7],
+            "tmcp_version": [0,8],
             "index": self.index,
             "team": self.team,
             "action": self.get_tmcp_action()
@@ -430,8 +427,8 @@ class VirxERLU(StandaloneBot):
     def get_tmcp_action(self):
         if self.is_clear():
             return {
-                "type": "WAIT",
-                "ready": -1
+                "type": "READY",
+                "time": -1
             }
         
         stack_routine_name = self.stack[0].__class__.__name__
@@ -449,8 +446,8 @@ class VirxERLU(StandaloneBot):
 
         # by default, VirxERLU can't demo bots
         return {
-            "type": "WAIT",
-            "ready": self.get_minimum_game_time_to_ball()
+            "type": "READY",
+            "time": self.get_minimum_game_time_to_ball()
         }
 
     def handle_tmcp_packet(self, packet):
