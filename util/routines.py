@@ -246,8 +246,8 @@ class Aerial:
         self.fast_aerial = fast_aerial
         self.targets = targets
         self.shot_vector = None
-        self.target = None
-        self.ball = None
+        self.offset_target = None
+        self.ball_location = None
 
         self.jump_type_fast = None
         self.jumping = False
@@ -271,18 +271,18 @@ class Aerial:
 
         slice_n = math.ceil(T * 60) - 1
 
-        if (T > 0.1 and agent.odd_tick % 2 == 0) or self.ball is None:
+        if (T > 0.1 and agent.odd_tick % 2 == 0) or self.ball_location is None:
             ball = agent.ball_prediction_struct.slices[slice_n].physics.location
-            self.ball = Vector(ball.x, ball.y, ball.z)
+            self.ball_location = Vector(ball.x, ball.y, ball.z)
             self.ceiling = agent.me.location.z > 2044 - agent.me.hitbox.height * 2 and not agent.me.jumped
 
-        direction = (agent.ball.location - agent.me.location).normalize()
-        self.shot_vector = direction if self.targets is None else direction.clamp((self.targets[0] - self.ball).normalize(), (self.targets[1] - self.ball).normalize())
-        self.target = self.ball - (self.shot_vector * agent.ball_radius)
-        agent.sphere(self.ball, agent.ball_radius)
+            direction = (agent.ball.location - agent.me.location).normalize()
+            self.shot_vector = direction if self.targets is None else direction.clamp((self.targets[0] - self.ball_location).normalize(), (self.targets[1] - self.ball_location).normalize())
+            self.offset_target = self.ball_location - (self.shot_vector * agent.ball_radius)
+        agent.sphere(self.ball_location, agent.ball_radius)
 
         if self.ceiling:
-            self.target -= Vector(z=agent.ball_radius)
+            self.offset_target -= Vector(z=agent.ball_radius)
 
         if self.jumping or self.jump_time == -1:
             agent.dbg_2d("Jumping")
@@ -330,45 +330,44 @@ class Aerial:
         if self.ceiling:
             agent.dbg_2d(f"Ceiling shot")
 
-        delta_x = self.target - xf
+        delta_x = self.offset_target - xf
         direction = delta_x.normalize() if not self.jumping else delta_x.flatten().normalize()
 
         agent.line(agent.me.location, agent.me.location + (direction * 250), agent.renderer.black())
         c_vf = vf + agent.me.location
         agent.line(c_vf - Vector(z=100), c_vf + Vector(z=100), agent.renderer.blue())
         agent.line(xf - Vector(z=100), xf + Vector(z=100), agent.renderer.red())
-        agent.line(self.target - Vector(z=100), self.target + Vector(z=100), agent.renderer.green())
+        agent.line(self.offset_target - Vector(z=100), self.offset_target + Vector(z=100), agent.renderer.green())
 
-        if not self.dodging:
-            target = delta_x if delta_x.magnitude() >= agent.boost_accel * agent.delta_time * 0.1 else self.shot_vector
-            target = agent.me.local(target)
+        delta_v = delta_x.dot(agent.me.forward) / T
 
-            if agent.controller.jump:
-                defaultPD(agent, target.flatten(), up=agent.me.up)
+        if self.counter in {0, 4}:
+            target = agent.me.local(delta_x) if (delta_v >= agent.boost_accel * 0.1 + throttle_accel * agent.delta_time) or (T > 1 and delta_v >= throttle_accel * agent.delta_time * 0.1) else agent.me.local_location(self.offset_target)
+
+            if self.jumping:
+                defaultPD(agent, target)
             elif virxrlcu.find_landing_plane(tuple(agent.me.location), tuple(agent.me.velocity), agent.gravity.z) == 4:
                 defaultPD(agent, target, upside_down=True)
             else:
-                defaultPD(agent, target, upside_down=self.shot_vector.z < 0)
+                defaultPD(agent, target, upside_down=agent.me.location.z > self.offset_target.z)
 
         # only boost/throttle if we're facing the right direction
-        if abs(agent.me.forward.dot(direction)) > 0.75 and T > 0:
-            if T > 1 and not self.jumping: agent.controller.roll = 1 if self.shot_vector.z < 0 else -1
+        if T > 0 and abs(agent.me.forward.angle(direction)) < 0.25 and not self.jumping:
+            if T > 0.3: agent.controller.roll = 1 if self.shot_vector.z < 0 else -1
             # the change in velocity the bot needs to put it on an intercept course with the target
-            delta_v = delta_x.dot(agent.me.forward) / T
-            if not self.jumping and agent.me.boost > 0 and delta_v >= agent.boost_accel * agent.delta_time * 0.1:
+            if agent.me.airborne and agent.me.boost > 0 and delta_v >= agent.boost_accel * 0.1 + throttle_accel * agent.delta_time:
                 agent.controller.boost = True
-                delta_v -= agent.boost_accel * agent.delta_time * 0.1
-
-            if abs(delta_v) >= throttle_accel * agent.delta_time:
+                agent.controller.throttle = 1
+            elif abs(delta_v) >= throttle_accel * agent.delta_time * 0.1:
                 agent.controller.throttle = cap(delta_v / (throttle_accel * agent.delta_time), -1, 1)
 
-        if T <= -0.2 or (not self.jumping and not agent.me.airborne) or (not self.jumping and T > 1.5 and not virxrlcu.aerial_shot_is_viable(T, agent.boost_accel, tuple(agent.gravity), agent.me.get_raw(agent), tuple(self.target))):
+        if T <= -0.2 or (not self.jumping and not agent.me.airborne) or (not self.jumping and T > 1.5 and not virxrlcu.aerial_shot_is_viable(T, agent.boost_accel, tuple(agent.gravity), agent.me.get_raw(agent), tuple(self.offset_target))):
             agent.pop()
             agent.shooting = False
             agent.push(ball_recovery())
-        elif (self.ceiling and self.target.dist(agent.me.location) < agent.ball_radius + agent.me.hitbox.length and not agent.me.doublejumped and agent.me.location.z < agent.ball.location.z + agent.ball_radius and self.target.y * side(agent.team) > -4240) or (not self.ceiling and not agent.me.doublejumped and T < 0.1):
+        elif (self.ceiling and self.offset_target.dist(agent.me.location) < agent.ball_radius + agent.me.hitbox.length and not agent.me.doublejumped and agent.me.location.z < agent.ball.location.z + agent.ball_radius and self.offset_target.y * side(agent.team) > -4240) or (not self.ceiling and not agent.me.doublejumped and T < 0.1):
             agent.dbg_2d("Flipping")
-            vector = agent.me.local_location(self.target).flatten().normalize()
+            vector = agent.me.local_location(self.offset_target).flatten().normalize()
             scale = 1 / max(abs(vector.x), abs(vector.y))
             self.p = cap(-vector.x * scale, -1, 1)
             self.y = cap(vector.y * scale, -1, 1)

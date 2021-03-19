@@ -14,10 +14,10 @@ from rlbot.agents.base_agent import SimpleControllerState
 from rlbot.agents.standalone.standalone_bot import StandaloneBot, run_bot
 
 # If you're putting your bot in the botpack, or submitting to a tournament, make this True!
-TOURNAMENT_MODE = False
+TOURNAMENT_MODE = True
 
 # Make False to enable hot reloading, at the cost of the GUI
-EXTRA_DEBUGGING = True
+EXTRA_DEBUGGING = False
 
 if not TOURNAMENT_MODE and EXTRA_DEBUGGING:
     from gui import Gui
@@ -392,6 +392,8 @@ class VirxERLU(StandaloneBot):
         return -1
 
     def tmcp_packet_is_different(self, tmcp_packet):
+        # If you're looking to overwrite this, you might want to do a version check
+        
         # If the packets are the same
         if self.last_sent_tmcp_packet == tmcp_packet:
             return False
@@ -402,7 +404,12 @@ class VirxERLU(StandaloneBot):
         if self.last_sent_tmcp_packet["action"]["type"] != action_type:
             return True
 
-        if action_type == "BALL" or action_type == "READY":
+        if action_type == "BALL":
+            dir1 = Vector(*self.last_sent_tmcp_packet["action"]["direction"])
+            dir2 = Vector(*tmcp_packet["action"]["direction"])
+            return abs(self.last_sent_tmcp_packet["action"]["time"] - tmcp_packet["action"]["time"]) >= 0.1 or dir1.magnitude() != dir2.magnitude() or dir1.angle(dir2) > 0.05
+
+        if action_type == "READY":
             return abs(self.last_sent_tmcp_packet["action"]["time"] - tmcp_packet["action"]["time"]) >= 0.1
 
         if action_type == "BOOST":
@@ -417,14 +424,17 @@ class VirxERLU(StandaloneBot):
     def create_tmcp_packet(self):
         # https://github.com/RLBot/RLBot/wiki/Team-Match-Communication-Protocol
         # don't worry about duplicate packets - this is handled automatically
+        tmcp_version = [0, 9]
         return {
-            "tmcp_version": [0,8],
+            "tmcp_version": tmcp_version,
             "index": self.index,
             "team": self.team,
-            "action": self.get_tmcp_action()
+            "action": self.get_tmcp_action(tmcp_version)
         }
 
-    def get_tmcp_action(self):
+    def get_tmcp_action(self, tmcp_version):
+        # If you're looking to overwrite this, you might want to do a version check
+
         if self.is_clear():
             return {
                 "type": "READY",
@@ -436,7 +446,8 @@ class VirxERLU(StandaloneBot):
         if stack_routine_name in {'Aerial', 'jump_shot', 'ground_shot', 'double_jump', 'short_shot'}:
             return {
                 "type": "BALL",
-                "time": -1 if stack_routine_name == 'short_shot' else self.stack[0].intercept_time
+                "time": -1 if stack_routine_name == 'short_shot' else self.stack[0].intercept_time,
+                "direction": [0, 0, 0] if stack_routine_name == 'short_shot' or self.stack[0].shot_vector is None else list(self.stack[0].shot_vector)
             }
         if stack_routine_name == "goto_boost":
             return {
