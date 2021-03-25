@@ -12,9 +12,11 @@ from typing import List, Tuple
 import numpy as np
 from rlbot.agents.base_agent import SimpleControllerState
 from rlbot.agents.standalone.standalone_bot import StandaloneBot, run_bot
+from rlbot.messages.flat import MatchSettings
+from rlbot.utils.structures.game_data_struct import GameTickPacket
 
 # If you're putting your bot in the botpack, or submitting to a tournament, make this True!
-TOURNAMENT_MODE = True
+TOURNAMENT_MODE = False
 
 # Make False to enable hot reloading, at the cost of the GUI
 EXTRA_DEBUGGING = False
@@ -28,10 +30,10 @@ class VirxERLU(StandaloneBot):
     # Massive thanks to ddthj/GoslingAgent (GitHub repo) for the basis of VirxERLU
     # VirxERLU on VirxEC Showcase -> https://virxerlu.virxcase.dev/
     # Wiki -> https://github.com/VirxEC/VirxERLU/wiki
-    def initialize_agent(self):
+    def __init__(self, name, team, index):
+        super().__init__(name, team, index)
         self.tournament = TOURNAMENT_MODE
         self.extra_debugging = EXTRA_DEBUGGING
-        self.startup_time = time_ns()
         self.true_name = re.split(r' \(\d+\)$', self.name)[0]
 
         self.debug = [[], []]
@@ -39,17 +41,25 @@ class VirxERLU(StandaloneBot):
         self.debug_lines = True
         self.debug_3d_bool = True
         self.debug_stack_bool = True
-        self.debug_2d_bool = self.true_name == self.name
+        self.debug_2d_bool = self.name == self.true_name
         self.show_coords = False
         self.debug_ball_path = False
         self.debug_ball_path_precision = 10
         self.disable_driving = False
 
+    def initialize_agent(self):
+        self.startup_time = time_ns()
+
         T = datetime.now()
         T = T.strftime("%Y-%m-%d %H;%M")
 
+        error_folder = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "errors")
+
+        if not os.path.isdir(error_folder):
+            os.mkdir(error_folder)
+
         self.traceback_file = (
-            os.getcwd(),
+            os.path.join(error_folder),
             f"-traceback ({T}).txt"
         )
 
@@ -57,11 +67,6 @@ class VirxERLU(StandaloneBot):
             self.gui = Gui(self)
             self.print("Starting the GUI...")
             self.gui.start()
-
-            if self.matchcomms_root is not None:
-                self.match_comms = MatchComms(self)
-                self.print("Starting the match communication handler...")
-                self.match_comms.start()
 
         self.print("Building game information")
 
@@ -101,18 +106,11 @@ class VirxERLU(StandaloneBot):
             "heatseeker"
         )
 
-        ball_size = (
-            92.75,
-            69.25,
-            139.5,
-            239.75
-        )
-
         self.gravity = gravity[mutators.GravityOption()]
         self.boost_accel = boost_accel[mutators.BoostStrengthOption()]
         self.boost_amount = boost_amount[mutators.BoostOption()]
         self.game_mode = game_mode[match_settings.GameMode()]
-        self.ball_radius = ball_size[mutators.BallSizeOption()]
+        self.ball_radius = 92.75
 
         self.friends = ()
         self.foes = ()
@@ -140,6 +138,7 @@ class VirxERLU(StandaloneBot):
         self.odd_tick = -1
         self.delta_time = 1 / 120
         self.last_sent_tmcp_packet = None
+        # self.sent_tmcp_packet_times = {}
 
         self.future_ball_location_slice = 180
         self.balL_prediction_struct = None
@@ -149,9 +148,6 @@ class VirxERLU(StandaloneBot):
         if not self.tournament and self.extra_debugging:
             self.gui.stop()
 
-            if self.matchcomms_root is not None:
-                self.match_comms.stop()
-
     def is_hot_reload_enabled(self):
         # The tkinter GUI isn't compatible with hot reloading
         # Use the Continue and Spawn option in the RLBotGUI instead
@@ -159,7 +155,12 @@ class VirxERLU(StandaloneBot):
 
     def get_ready(self, packet):
         field_info = self.get_field_info()
-        self.boosts = tuple(boost_object(i, boost.location, boost.is_full_boost) for i, boost in enumerate(field_info.boost_pads))
+        self.boosts = tuple(boost_object(i, field_info.boost_pads[i].location, field_info.boost_pads[i].is_full_boost) for i in range(field_info.num_boosts))
+        if len(self.boosts) != 34:
+            print(f"There are {len(self.boosts)} boost pads! @Tarehart REEEEE!")
+            for i, boost in enumerate(self.boosts):
+                print(f"{boost.location} ({i})")
+
         self.refresh_player_lists(packet)
         self.ball.update(packet)
 
@@ -171,10 +172,17 @@ class VirxERLU(StandaloneBot):
         self.ready = True
 
     def refresh_player_lists(self, packet):
+        match_settings = self.get_match_settings()
         # Useful to keep separate from get_ready because humans can join/leave a match
         self.friends = tuple(car_object(i, packet) for i in range(packet.num_cars) if packet.game_cars[i].team is self.team and i != self.index)
         self.foes = tuple(car_object(i, packet) for i in range(packet.num_cars) if packet.game_cars[i].team != self.team)
         self.me = car_object(self.index, packet)
+
+        try:
+            true_name = match_settings.PlayerConfigurations(self.index).Name()
+            self.true_name = true_name
+        except Exception:
+            print(f"{self.name}: I appear to have been forcefully pushed into a match! How rude.")
 
     def push(self, routine):
         self.stack.append(routine)
@@ -230,7 +238,7 @@ class VirxERLU(StandaloneBot):
     def is_clear(self):
         return len(self.stack) < 1
 
-    def preprocess(self, packet):
+    def preprocess(self, packet: GameTickPacket):
         if packet.num_cars != len(self.friends)+len(self.foes)+1:
             self.refresh_player_lists(packet)
 
@@ -245,6 +253,9 @@ class VirxERLU(StandaloneBot):
         self.delta_time = self.game.time - self.time
         self.time = self.game.time
         self.gravity = self.game.gravity
+
+        self.ball_radius = self.ball.shape.hitbox.diameter if self.ball.shape.type in {1, 2} else (sum(self.ball.shape.hitbox.length, self.ball.shape.hitbox.width, self.ball.shape.hitbox.height) / 3)
+        self.ball_radius /= 2
 
         # When a new kickoff begins we empty the stack
         if not self.kickoff_flag and self.game.round_active and self.game.kickoff:
@@ -263,7 +274,7 @@ class VirxERLU(StandaloneBot):
 
         self.ball_prediction_struct = self.get_ball_prediction_struct()
 
-        if self.tournament and self.matchcomms_root is not None:
+        if self.matchcomms_root is not None:
             while 1:
                 try:
                     msg = self.matchcomms.incoming_broadcast.get_nowait()
@@ -278,6 +289,10 @@ class VirxERLU(StandaloneBot):
                         self.handle_match_comm(msg)
                 except Exception:
                     print_exc()
+
+    def is_shooting(self):
+        stack_routine_name = '' if self.is_clear() else self.stack[0].__class__.__name__
+        return stack_routine_name in {'Aerial', 'jump_shot', 'double_jump', 'ground_shot', 'short_shot'}
 
     def get_output(self, packet):
         try:
@@ -294,11 +309,7 @@ class VirxERLU(StandaloneBot):
                 if not self.is_clear():
                     self.clear()
             elif self.game.round_active:
-                stack_routine_name = '' if self.is_clear() else self.stack[0].__class__.__name__
-                if stack_routine_name in {'Aerial', 'jump_shot', 'double_jump', 'ground_shot', 'short_shot'}:
-                    self.shooting = True
-                else:
-                    self.shooting = False
+                self.shooting = self.is_shooting()
 
                 try:
                     self.run()  # Run strategy code; This is a very expensive function to run
@@ -315,6 +326,12 @@ class VirxERLU(StandaloneBot):
                     if self.last_sent_tmcp_packet is None or self.tmcp_packet_is_different(tmcp_packet):
                         self.matchcomms.outgoing_broadcast.put_nowait(tmcp_packet)
                         self.last_sent_tmcp_packet = tmcp_packet
+                        
+                        # t = math.floor(self.time)
+                        # if self.sent_tmcp_packet_times.get(t) is None:
+                        #     self.sent_tmcp_packet_times[t] = 1
+                        # else:
+                        #     self.sent_tmcp_packet_times[t] += 1
                 except Exception:
                     t_file = os.path.join(self.traceback_file[0], self.name+"-TMCP"+self.traceback_file[1])
                     print(f"ERROR in {self.name} with sending TMCP packet; see '{t_file}'")
@@ -366,6 +383,11 @@ class VirxERLU(StandaloneBot):
                         self.line(top_back_right, top_front_right, hitbox_color)
 
                     if self.debug_2d_bool:
+                        # if len(self.sent_tmcp_packet_times) > 0:
+                        #     avg_tmcp_packets = sum(self.sent_tmcp_packet_times.values()) / len(self.sent_tmcp_packet_times)
+
+                        #     self.debug[1].insert(0, f"Avg. TMCP packets / sec: {avg_tmcp_packets}")
+
                         if self.delta_time != 0:
                             self.debug[1].insert(0, f"TPS: {round(1 / self.delta_time)}")
 
@@ -407,7 +429,7 @@ class VirxERLU(StandaloneBot):
         if action_type == "BALL":
             dir1 = Vector(*self.last_sent_tmcp_packet["action"]["direction"])
             dir2 = Vector(*tmcp_packet["action"]["direction"])
-            return abs(self.last_sent_tmcp_packet["action"]["time"] - tmcp_packet["action"]["time"]) >= 0.1 or dir1.magnitude() != dir2.magnitude() or dir1.angle(dir2) > 0.05
+            return abs(self.last_sent_tmcp_packet["action"]["time"] - tmcp_packet["action"]["time"]) >= 0.1 or dir1.magnitude() != dir2.magnitude() or dir1.angle(dir2) > 0.5
 
         if action_type == "READY":
             return abs(self.last_sent_tmcp_packet["action"]["time"] - tmcp_packet["action"]["time"]) >= 0.1
@@ -443,11 +465,20 @@ class VirxERLU(StandaloneBot):
         
         stack_routine_name = self.stack[0].__class__.__name__
 
-        if stack_routine_name in {'Aerial', 'jump_shot', 'ground_shot', 'double_jump', 'short_shot'}:
+        if stack_routine_name == 'short_shot':
             return {
                 "type": "BALL",
-                "time": -1 if stack_routine_name == 'short_shot' else self.stack[0].intercept_time,
-                "direction": [0, 0, 0] if stack_routine_name == 'short_shot' or self.stack[0].shot_vector is None else list(self.stack[0].shot_vector)
+                "time": -1,
+                "direction" : [0, 0, 0]
+            }
+        if stack_routine_name in {'Aerial', 'jump_shot', 'ground_shot', 'double_jump'}:
+            if self.stack[0].shot_vector is None:
+                self.stack[0].preprocess(self)
+
+            return {
+                "type": "BALL",
+                "time": self.stack[0].intercept_time,
+                "direction": list(self.stack[0].shot_vector)
             }
         if stack_routine_name == "goto_boost":
             return {
@@ -482,13 +513,14 @@ class VirxERLU(StandaloneBot):
 
 
 class car_object:
-    # The carObject, and kin, convert the gametickpacket in something a little friendlier to use,
-    # and are updated by VirxERLU as the game runs
-    def __init__(self, index, packet=None):
+    # objects convert the gametickpacket in something a little friendlier to use
+    # and are automatically updated by VirxERLU as the game runs
+    def __init__(self, index, packet=None, match_settings: MatchSettings=None):
         self._vec = Vector  # ignore this property
         self.location = self._vec()
         self.orientation = Matrix3()
         self.velocity = self._vec()
+        self._local_velocity = self._vec()
         self.angular_velocity = self._vec()
         self.demolished = False
         self.airborne = False
@@ -498,16 +530,23 @@ class car_object:
         self.boost = 0
         self.index = index
         self.tmcp_action = None
+        self.true_name = None
+        self.land_time = 0
+
+        if match_settings is not None:
+            try:
+                self.true_name = match_settings.PlayerConfigurations(index).Name()
+            except Exception:
+                pass
 
         if packet is not None:
             car = packet.game_cars[self.index]
 
             self.name = car.name
-            self.true_name = re.split(r' \(\d+\)$', self.name)[0]
+            if self.true_name is None: self.true_name = re.split(r' \(\d+\)$', self.name)[0]  # e.x. 'ABot (12)' will instead be just 'ABot'
             self.team = car.team
             self.hitbox = hitbox_object(car.hitbox.length, car.hitbox.width, car.hitbox.height, Vector(car.hitbox_offset.x, car.hitbox_offset.y, car.hitbox_offset.z))
-            self.offset = self.hitbox.offset  # please use self.hitbox.offset and not self.offset
-            
+
             self.update(packet)
 
             return
@@ -516,7 +555,6 @@ class car_object:
         self.true_name = None
         self.team = -1
         self.hitbox = hitbox_object()
-        self.offset = self.hitbox.offset
 
     def local(self, value):
         # Generic localization
@@ -528,7 +566,7 @@ class car_object:
         # y is the velocity to the left (+) or right (-)
         # z if the velocity upwards (+) or downwards (-)
         if velocity is None:
-            velocity = self.velocity
+            return self._local_velocity
 
         return self.local(velocity)
 
@@ -556,11 +594,12 @@ class car_object:
             tuple(self.hitbox.offset)
         )
 
-    def update(self, packet):
+    def update(self, packet: GameTickPacket):
         car = packet.game_cars[self.index]
         car_phy = car.physics
         self.location = self._vec.from_vector(car_phy.location)
         self.velocity = self._vec.from_vector(car_phy.velocity)
+        self._local_velocity = self.local(self.velocity)
         self.orientation = Matrix3.from_rotator(car_phy.rotation)
         self.angular_velocity = self.orientation.dot((car_phy.angular_velocity.x, car_phy.angular_velocity.y, car_phy.angular_velocity.z))
         self.demolished = car.is_demolished
@@ -569,6 +608,9 @@ class car_object:
         self.jumped = car.jumped
         self.doublejumped = car.double_jumped
         self.boost = car.boost
+
+        if self.airborne and car.has_wheel_contact:
+            self.land_time = packet.game_info.seconds_elapsed
 
     @property
     def forward(self):
@@ -600,6 +642,17 @@ class hitbox_object:
         return (self.length, self.width, self.height)[index]
 
 
+class hitbox_sphere:
+    def __init__(self, diameter=92.75):
+        self.diameter = diameter
+
+
+class hitbox_cylinder:
+    def __init__(self, diameter=92.75, height=92.75):
+        self.diameter = diameter
+        self.height = height
+
+
 class last_touch:
     def __init__(self):
         self.location = Vector()
@@ -615,13 +668,30 @@ class last_touch:
         self.car = car_object(touch.player_index, packet)
 
 
+class ball_shape:
+    def __init__(self):
+        self.type = -1
+        self.hitbox = None
+
+    def update(self, packet: GameTickPacket):
+        shape = packet.game_ball.collision_shape
+        self.type = shape.type
+
+        if self.type == 0:
+            self.hitbox = hitbox_object(shape.box.length, shape.box.width, shape.box.height)
+        elif self.type == 1: 
+            self.hitbox = hitbox_sphere(shape.sphere.diameter)
+        elif self.type == 2:
+            self.hitbox = hitbox_cylinder(shape.cylinder.diameter, shape.cylinder.height)
+
+
 class ball_object:
     def __init__(self):
         self._vec = Vector  # ignore this property
         self.location = self._vec()
         self.velocity = self._vec()
-        self.latest_touched_time = 0
-        self.latest_touched_team = 0
+        self.last_touch = last_touch()
+        self.shape = ball_shape()
 
     def get_raw(self):
         return (
@@ -629,12 +699,12 @@ class ball_object:
             tuple(self.velocity)
         )
 
-    def update(self, packet):
+    def update(self, packet: GameTickPacket):
         ball = packet.game_ball
         self.location = self._vec.from_vector(ball.physics.location)
         self.velocity = self._vec.from_vector(ball.physics.velocity)
-        self.latest_touched_time = ball.latest_touch.time_seconds
-        self.latest_touched_team = ball.latest_touch.team
+        self.last_touch.update(packet)
+        self.shape.update(packet)
 
 
 class boost_object:
@@ -671,7 +741,7 @@ class game_object:
         self.foe_score = 0
         self.gravity = Vector()
 
-    def update(self, team, packet):
+    def update(self, team, packet: GameTickPacket):
         game = packet.game_info
         self.time = game.seconds_elapsed
         self.time_remaining = game.game_time_remaining
@@ -874,7 +944,7 @@ class Vector:
         # Returns the angle between this Vector and another Vector in radians
         return math.acos(max(min(np.dot(self.normalize()._np, value.normalize()._np).item(), 1), -1))
 
-    def rotate(self, angle: float) -> Vector:
+    def rotate2D(self, angle: float) -> Vector:
         # Rotates this Vector by the given angle in radians
         # Note that this is only 2D, in the x and y axis
         return Vector((math.cos(angle)*self.x) - (math.sin(angle)*self.y), (math.sin(angle)*self.x) + (math.cos(angle)*self.y), self.z)
@@ -895,13 +965,13 @@ class Vector:
     def clamp(self, start: Vector, end: Vector) -> Vector:
         # This extends clamp2D so it also clamps the vector's z
         s = self.clamp2D(start, end)
-        start_z = min(start.z, end.z)
-        end_z = max(start.z, end.z)
 
-        if s.z < start_z:
-            s.z = start_z
-        elif s.z > end_z:
-            s.z = end_z
+        if s.z < start.z:
+            s = s.flatten().scale(1 - start.z)
+            s.z = start.z
+        elif s.z > end.z:
+            s = s.flatten().scale(1 - end.z)
+            s.z = end.z
 
         return s
 

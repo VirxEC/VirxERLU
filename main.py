@@ -30,28 +30,16 @@ class Bot(VirxERLU):
             # we don't want to do anything else during our kickoff
             return
 
-        # If the stack if clear and we're in the air
-        if self.is_clear() and self.me.airborne:
-            # Recover - This routine supports floor, wall, and ceiling recoveries, as well as recovering towards a target
-            self.push(routines.recovery())
+        # how many friends we have (not including ourself!)
+        num_friends = len(self.friends)
 
-            # we've made our decision and we don't want to run anything else
-            return
-
-        # If we have less than 36 boost
-        # TODO this bot will go for boost no matter what - this is AWFUL, especially in a 1v1!
-        if self.me.boost < 36:
+        # If we have friends and we have less than 36 boost and the no boost mutator isn't active
+        # We have allies that can back us up, so let's be more greedy when getting boost
+        if num_friends > 0 and self.me.boost < 36 and self.boost_amount != "no boost":
             # If the stack is clear
             if self.is_clear():
-                # Get a list of all of the large, active boosts
-                boosts = tuple(boost for boost in self.boosts if boost.active and boost.large)
-
-                # if there's at least one large and active boost
-                if len(boosts) > 0:
-                    # Get the closest boost
-                    closest_boost = min(boosts, key=lambda boost: boost.location.dist(self.me.location))
-                    # Goto the nearest boost
-                    self.push(routines.goto_boost(closest_boost))
+                # goto the nearest boost
+                self.goto_nearest_boost()
 
             # we've made our decision and we don't want to run anything else
             if not self.is_clear():
@@ -64,7 +52,7 @@ class Bot(VirxERLU):
             # TODO we might miss the net, even when using a target - make a pair of targets that are small than the goal so we have a better chance of scoring!
             # If the ball is on the enemy's side of the field, or slightly on our side
             if self.ball.location.y * utils.side(self.team) < 640:
-                # Find a shot, on target - double_jump, jump_shot, and ground_shot  are automatically disabled if we're airborne
+                # Find a shot, on target - double_jump, jump_shot, and ground_shot are automatically disabled if we're airborne
                 shot = tools.find_shot(self, self.foe_goal_shot)
 
             # TODO Using an anti-target here could be cool - do to this, pass in a target tuple that's (right_target, left_target) (instead of (left, right)) into tools.find_shot (NOT tools.find_any_shot)
@@ -101,6 +89,26 @@ class Bot(VirxERLU):
                 # we've made our decision and we don't want to run anything else
                 return
 
+        # If the stack if clear and we're in the air
+        if self.is_clear() and self.me.airborne:
+            # Recover - This routine supports floor, wall, and ceiling recoveries, as well as recovering towards a target
+            self.push(routines.recovery())
+
+            # we've made our decision and we don't want to run anything else
+            return
+
+        # If we have no friends and we have less than 36 boost and the no boost mutator isn't active
+        # Since we have no friends to back us up, we need to prioritize shots over getting boost
+        if num_friends == 0 and self.me.boost < 36 and self.boost_amount != "no boost":
+            # If the stack is clear
+            if self.is_clear():
+                # goto the nearest boost
+                self.goto_nearest_boost()
+
+            # we've made our decision and we don't want to run anything else
+            if not self.is_clear():
+                return
+
         # TODO this setup is far from ideal - a custom shadow/retreat routine is probably best for the bot...
         # Make sure to put custom routines in a separate file from VirxERLU routines, so you can easily update VirxERLU to newer versions.
         # If the stack is still clear
@@ -121,6 +129,17 @@ class Bot(VirxERLU):
                     self.push(shadow_routine)
 
         # If we get here, then we are doing our kickoff, nor can we shoot, nor can we retreat or shadow - so let's just wait!
+
+    def goto_nearest_boost(self):
+        # Get a list of all of the large, active boosts
+        boosts = tuple(boost for boost in self.boosts if boost.active and boost.large)
+
+        # if there's at least one large and active boost
+        if len(boosts) > 0:
+            # Get the closest boost
+            closest_boost = min(boosts, key=lambda boost: boost.location.dist(self.me.location))
+            # Goto the nearest boost
+            self.push(routines.goto_boost(closest_boost))
 
     def demolished(self):
         # NOTE This method is ran every tick that your bot it demolished
