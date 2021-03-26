@@ -23,7 +23,6 @@ EXTRA_DEBUGGING = False
 
 if not TOURNAMENT_MODE and EXTRA_DEBUGGING:
     from gui import Gui
-    from match_comms import MatchComms
 
 
 class VirxERLU(StandaloneBot):
