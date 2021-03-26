@@ -1031,16 +1031,7 @@ class ground_shot:
 
                 T = self.intercept_time - agent.time
 
-            slice_n = round(T * 60) - 1
-            ball = agent.ball_prediction_struct.slices[slice_n].physics.location
-            ball_location = Vector(ball.x, ball.y, ball.z)
-            car_to_ball_norm = (ball_location - agent.me.location).normalize()
-            shot_vector = car_to_ball_norm if self.targets is None else car_to_ball_norm.clamp((self.targets[0] - ball_location).normalize(), (self.targets[1] - ball_location).normalize())
-
-            if self.shot_vector is None or self.ball_location.dist(ball_location) > 5:
-                self.ball_location = ball_location
-                self.shot_vector = shot_vector
-                self.offset_target = self.ball_location - (self.shot_vector * agent.ball_radius)
+            self.preprocess(agent)
     
         agent.sphere(self.ball_location, agent.ball_radius)
         # Capping T above 0 to prevent division problems
