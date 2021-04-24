@@ -279,7 +279,7 @@ class VirxERLU(StandaloneBot):
                     msg = self.matchcomms.incoming_broadcast.get_nowait()
                 except Exception:
                     break
-                
+
                 try:
                     if msg.get('tmcp_version') is not None:
                         if msg.get("team") == self.team and msg.get("index") != self.index:
@@ -325,7 +325,7 @@ class VirxERLU(StandaloneBot):
                     if self.last_sent_tmcp_packet is None or self.tmcp_packet_is_different(tmcp_packet):
                         self.matchcomms.outgoing_broadcast.put_nowait(tmcp_packet)
                         self.last_sent_tmcp_packet = tmcp_packet
-                        
+
                         # t = math.floor(self.time)
                         # if self.sent_tmcp_packet_times.get(t) is None:
                         #     self.sent_tmcp_packet_times[t] = 1
@@ -353,14 +353,13 @@ class VirxERLU(StandaloneBot):
 
                         self.renderer.draw_string_3d(tuple(self.me.location), 2, 2, "\n".join(self.debug[0]), self.renderer.team_color(alt_color=True))
 
-                        self.debug[0] = []
-
                     if self.show_coords:
-                        self.debug[1].insert(0, f"Hitbox: [{self.me.hitbox.length} {self.me.hitbox.width} {self.me.hitbox.height}]")
+                        car = self.me
+
+                        self.debug[1].insert(0, f"Hitbox: {round(self.me.hitbox)}")
                         self.debug[1].insert(0, f"Location: {round(self.me.location)}")
 
-                        car = self.me
-                        center = car.local(car.hitbox.offset) + car.location
+                        center = car.location
                         top = car.up * (car.hitbox.height / 2)
                         front = car.forward * (car.hitbox.length / 2)
                         right = car.right * (car.hitbox.width / 2)
@@ -394,12 +393,11 @@ class VirxERLU(StandaloneBot):
                             self.dbg_2d(round(self.stack[0].intercept_time - self.time, 4))
 
                         self.renderer.draw_string_2d(20, 300, 2, 2, "\n".join(self.debug[1]), self.renderer.team_color(alt_color=True))
-                        self.debug[1] = []
 
                     if self.debug_ball_path and self.ball_prediction_struct is not None:
                         self.polyline(tuple(Vector(ball_slice.physics.location.x, ball_slice.physics.location.y, ball_slice.physics.location.z) for ball_slice in self.ball_prediction_struct.slices[::self.debug_ball_path_precision]))
-                else:
-                    self.debug = [[], []]
+
+                self.debug = [[], []]
 
             return SimpleControllerState() if self.disable_driving else self.controller
         except Exception:
@@ -414,11 +412,11 @@ class VirxERLU(StandaloneBot):
 
     def tmcp_packet_is_different(self, tmcp_packet):
         # If you're looking to overwrite this, you might want to do a version check
-        
+
         # If the packets are the same
         if self.last_sent_tmcp_packet == tmcp_packet:
             return False
-        
+
         action_type = tmcp_packet["action"]["type"]
 
         # if the action types aren't the same
@@ -445,51 +443,49 @@ class VirxERLU(StandaloneBot):
     def create_tmcp_packet(self):
         # https://github.com/RLBot/RLBot/wiki/Team-Match-Communication-Protocol
         # don't worry about duplicate packets - this is handled automatically
-        tmcp_version = [0, 9]
-        return {
-            "tmcp_version": tmcp_version,
+        tmcp_packet = {
+            "tmcp_version": [1, 0],
             "index": self.index,
-            "team": self.team,
-            "action": self.get_tmcp_action(tmcp_version)
+            "team": self.team
         }
 
-    def get_tmcp_action(self, tmcp_version):
         # If you're looking to overwrite this, you might want to do a version check
 
         if self.is_clear():
-            return {
+            tmcp_packet["action"] = {
                 "type": "READY",
                 "time": -1
             }
-        
+            return tmcp_packet
+
         stack_routine_name = self.stack[0].__class__.__name__
 
-        if stack_routine_name == 'short_shot':
-            return {
+        if stack_routine_name in {'Aerial', 'jump_shot', 'ground_shot', 'double_jump', 'short_shot'}:
+            tmcp_packet["action"] =  {
                 "type": "BALL",
-                "time": -1,
-                "direction" : [0, 0, 0]
+                "time": -1 if stack_routine_name == 'short_shot' else self.stack[0].intercept_time,
+                "direction": [0, 0, 0] if stack_routine_name == 'short_shot' or self.stack[0].shot_vector is None else list(self.stack[0].shot_vector)
             }
-        if stack_routine_name in {'Aerial', 'jump_shot', 'ground_shot', 'double_jump'}:
-            if self.stack[0].shot_vector is None:
-                self.stack[0].preprocess(self)
+            return tmcp_packet
 
-            return {
-                "type": "BALL",
-                "time": self.stack[0].intercept_time,
-                "direction": list(self.stack[0].shot_vector)
-            }
         if stack_routine_name == "goto_boost":
-            return {
+            tmcp_packet["action"] = {
                 "type": "BOOST",
                 "target": self.stack[0].boost.index
             }
+            return tmcp_packet
 
         # by default, VirxERLU can't demo bots
-        return {
+        tmcp_packet["action"] = {
             "type": "READY",
             "time": self.get_minimum_game_time_to_ball()
         }
+        return tmcp_packet
+
+    @DeprecationWarning
+    def get_tmcp_action(self, tmcp_version):
+        # don't use this - overwrite create_tmcp_packet instead
+        return None
 
     def handle_tmcp_packet(self, packet):
         # https://github.com/RLBot/RLBot/wiki/Team-Match-Communication-Protocol
@@ -515,12 +511,11 @@ class car_object:
     # objects convert the gametickpacket in something a little friendlier to use
     # and are automatically updated by VirxERLU as the game runs
     def __init__(self, index, packet=None, match_settings: MatchSettings=None):
-        self._vec = Vector  # ignore this property
-        self.location = self._vec()
+        self.location = Vector()
         self.orientation = Matrix3()
-        self.velocity = self._vec()
-        self._local_velocity = self._vec()
-        self.angular_velocity = self._vec()
+        self.velocity = Vector()
+        self._local_velocity = Vector()
+        self.angular_velocity = Vector()
         self.demolished = False
         self.airborne = False
         self.supersonic = False
@@ -559,10 +554,14 @@ class car_object:
         # Generic localization
         return self.orientation.dot(value)
 
+    def global_(self, value):
+        # Converts a localized vector to a global vector
+        return self.orientation.g_dot(value)
+
     def local_velocity(self, velocity=None):
         # Returns the velocity of an item relative to the car
         # x is the velocity forwards (+) or backwards (-)
-        # y is the velocity to the left (+) or right (-)
+        # y is the velocity to the right (+) or left (-)
         # z if the velocity upwards (+) or downwards (-)
         if velocity is None:
             return self._local_velocity
@@ -572,9 +571,21 @@ class car_object:
     def local_location(self, location):
         # Returns the location of an item relative to the car
         # x is how far the location is forwards (+) or backwards (-)
-        # y is the velocity to the left (+) or right (-)
+        # y is the velocity to the right (+) or left (-)
         # z is how far the location is upwards (+) or downwards (-)
         return self.local(location - self.location)
+
+    def global_location(self, location):
+        # Converts a localized location to a global location
+        return self.global_(location) + self.location
+
+    def local_flatten(self, value):
+        # Flattens a vector relative to the car
+        return self.global_(self.local(value).flatten())
+
+    def local_flatten_location(self, location):
+        # Flattens a location relative to the car
+        return self.global_location(self.local_location(location).flatten())
 
     def get_raw(self, agent, force_on_ground=False):
         return (
@@ -582,11 +593,11 @@ class car_object:
             tuple(self.velocity),
             (tuple(self.forward), tuple(self.right), tuple(self.up)),
             tuple(self.angular_velocity),
-            1 if self.demolished else 0,
-            1 if self.airborne and not force_on_ground else 0,
-            1 if self.supersonic else 0,
-            1 if self.jumped else 0,
-            1 if self.doublejumped else 0,
+            int(self.demolished),
+            int(self.airborne and not force_on_ground),
+            int(self.supersonic),
+            int(self.jumped),
+            int(self.doublejumped),
             self.boost if agent.boost_amount != 'unlimited' else 255,
             self.index,
             tuple(self.hitbox),
@@ -596,8 +607,8 @@ class car_object:
     def update(self, packet: GameTickPacket):
         car = packet.game_cars[self.index]
         car_phy = car.physics
-        self.location = self._vec.from_vector(car_phy.location)
-        self.velocity = self._vec.from_vector(car_phy.velocity)
+        self.location = Vector.from_vector(car_phy.location)
+        self.velocity = Vector.from_vector(car_phy.velocity)
         self._local_velocity = self.local(self.velocity)
         self.orientation = Matrix3.from_rotator(car_phy.rotation)
         self.angular_velocity = self.orientation.dot((car_phy.angular_velocity.x, car_phy.angular_velocity.y, car_phy.angular_velocity.z))
@@ -610,6 +621,22 @@ class car_object:
 
         if self.airborne and car.has_wheel_contact:
             self.land_time = packet.game_info.seconds_elapsed
+
+    @property
+    def rotation(self):
+        return self.orientation.rotation
+
+    @property
+    def pitch(self):
+        return self.orientation.pitch
+
+    @property
+    def yaw(self):
+        return self.orientation.yaw
+
+    @property
+    def roll(self):
+        return self.orientation.roll
 
     @property
     def forward(self):
@@ -640,6 +667,24 @@ class hitbox_object:
     def __getitem__(self, index):
         return (self.length, self.width, self.height)[index]
 
+    # len(self)
+    def __len__(self):
+        return 3  # this is a 3 dimensional vector, so we return 3
+
+    # str(self)
+    def __str__(self):
+        # Vector's can be printed to console
+        return f"[{self.length} {self.width} {self.height}]"
+
+    # repr(self)
+    def __repr__(self):
+        return f"hitbox_object(length={self.length}, width={self.width}, height={self.height})"
+
+    # round(self)
+    def __round__(self, decimals=0) -> hitbox_object:
+        # Rounds all of the values
+        return hitbox_object(*(round(euler_angle) for euler_angle in self))
+
 
 class hitbox_sphere:
     def __init__(self, diameter=92.75):
@@ -658,11 +703,11 @@ class last_touch:
         self.normal = Vector()
         self.time = -1
         self.car = None
-    
+
     def update(self, packet):
         touch = packet.game_ball.latest_touch
-        self.location = touch.hit_location
-        self.normal = touch.hit_normal
+        self.location = Vector.from_vector(touch.hit_location)
+        self.normal = Vector.from_vector(touch.hit_normal)
         self.time = touch.time_seconds
         self.car = car_object(touch.player_index, packet)
 
@@ -678,7 +723,7 @@ class ball_shape:
 
         if self.type == 0:
             self.hitbox = hitbox_object(shape.box.length, shape.box.width, shape.box.height)
-        elif self.type == 1: 
+        elif self.type == 1:
             self.hitbox = hitbox_sphere(shape.sphere.diameter)
         elif self.type == 2:
             self.hitbox = hitbox_cylinder(shape.cylinder.diameter, shape.cylinder.height)
@@ -686,9 +731,8 @@ class ball_shape:
 
 class ball_object:
     def __init__(self):
-        self._vec = Vector  # ignore this property
-        self.location = self._vec()
-        self.velocity = self._vec()
+        self.location = Vector()
+        self.velocity = Vector()
         self.last_touch = last_touch()
         self.shape = ball_shape()
 
@@ -700,8 +744,8 @@ class ball_object:
 
     def update(self, packet: GameTickPacket):
         ball = packet.game_ball
-        self.location = self._vec.from_vector(ball.physics.location)
-        self.velocity = self._vec.from_vector(ball.physics.velocity)
+        self.location = Vector.from_vector(ball.physics.location)
+        self.velocity = Vector.from_vector(ball.physics.velocity)
         self.last_touch.update(packet)
         self.shape.update(packet)
 
@@ -757,25 +801,57 @@ class Matrix3:
     # The Matrix3's sole purpose is to convert roll, pitch, and yaw data from the gametickpacket into an orientation matrix
     # An orientation matrix contains 3 Vector's
     # Matrix3[0] is the "forward" direction of a given car
-    # Matrix3[1] is the "left" direction of a given car
+    # Matrix3[1] is the "right" direction of a given car
     # Matrix3[2] is the "up" direction of a given car
-    def __init__(self, pitch=0, yaw=0, roll=0):
-        CP = math.cos(pitch)
-        SP = math.sin(pitch)
-        CY = math.cos(yaw)
-        SY = math.sin(yaw)
-        CR = math.cos(roll)
-        SR = math.sin(roll)
+    # If you have a distance between the car and some object, ie ball.location - car.location,
+    # you can convert that to local coordinates by dotting it with this matrix
+    # ie: local_ball_location = Matrix3.dot(ball.location - car.location)
+    # to convert from local coordinates back to global coordinates:
+    # global_ball_location = Matrix3.g_dot(local_ball_location) + car_location
+    def __init__(self, pitch=0, yaw=0, roll=0, simple=False):
+        self.pitch = pitch
+        self.yaw = yaw
+        self.roll = roll
+
+        if simple:
+            self._np = np.array(((0, 0, 0), (0, 0, 0), (0, 0, 0)))
+            self.rotation = (Vector(), Vector(), Vector())
+            return
+
+        CP = math.cos(self.pitch)
+        SP = math.sin(self.pitch)
+        CY = math.cos(self.yaw)
+        SY = math.sin(self.yaw)
+        CR = math.cos(self.roll)
+        SR = math.sin(self.roll)
         # List of 3 vectors, each descriping the direction of an axis: Forward, Left, and Up
-        self.data = (
-            Vector(CP*CY, CP*SY, SP),
-            Vector(CY*SP*SR-CR*SY, SY*SP*SR+CR*CY, -CP*SR),
-            Vector(-CR*CY*SP-SR*SY, -CR*SY*SP+SR*CY, CP*CR)
-        )
-        self.forward, self.right, self.up = self.data
+        self._np = np.array((
+            (CP*CY, CP*SY, SP),
+            (CY*SP*SR-CR*SY, SY*SP*SR+CR*CY, -CP*SR),
+            (-CR*CY*SP-SR*SY, -CR*SY*SP+SR*CY, CP*CR)
+        ))
+
+        self.rotation = tuple(Vector(*item) for item in self._np)
+
+    @property
+    def forward(self):
+        return self.rotation[0]
+
+    @property
+    def right(self):
+        return self.rotation[1]
+
+    @property
+    def up(self):
+        return self.rotation[2]
+
+    @DeprecationWarning
+    @property
+    def data(self):
+        return self.rotation
 
     def __getitem__(self, key):
-        return self.data[key]
+        return self.rotation[key]
 
     def __str__(self):
         return f"[{self.forward}\n {self.right}\n {self.up}]"
@@ -784,22 +860,47 @@ class Matrix3:
     def from_rotator(rotator) -> Matrix3:
         return Matrix3(rotator.pitch, rotator.yaw, rotator.roll)
 
-    def dot(self, vector):
-        return Vector(self.forward.dot(vector), self.right.dot(vector), self.up.dot(vector))
+    @staticmethod
+    def from_direction(direction: Vector, up: Vector) -> Matrix3:
+        # once again, big thanks to Chip and his RLU
+        # https://github.com/samuelpmish/RLUtilities/blob/develop/inc/linear_algebra/math.h
+
+        mat = Matrix3(simple=True)
+        forward = direction.normalize()
+        up = forward.cross(up.cross(forward)).normalize()
+        right = up.cross(forward).normalize()
+
+        # generate the orientation matrix
+        mat._np = np.array((tuple(forward), tuple(right), tuple(up)))
+        mat.rotation = (forward, right, up)
+
+        # generate the pitch/yaw/roll
+        mat.pitch = math.atan2(mat.forward.z, Vector(mat.forward.x, mat.forward.y).magnitude())
+        mat.yaw = math.atan2(mat.forward.y, mat.forward.x)
+        mat.roll = math.atan2(-mat.right.z, mat.up.z)
+
+        return mat
+
+    def dot(self, vec: Vector) -> Vector:
+        if hasattr(vec, "_np"):
+            vec = vec._np
+        return Vector(np_arr=self._np.dot(vec))
+
+    def g_dot(self, vec: Vector) -> Vector:
+        if hasattr(vec, "_np"):
+            vec = vec._np
+        return Vector(np_arr=self._np[0].dot(vec[0]) + self._np[1].dot(vec[1]) + self._np[2].dot(vec[2]))
 
     def det(self):
-        return self[0][0] * self[1][1] * self[2][2] + self[0][1] * self[1][2] * self[2][0] + \
-               self[0][2] * self[1][0] * self[2][1] - self[0][0] * self[1][2] * self[2][1] - \
-               self[0][1] * self[1][0] * self[2][2] - self[0][2] * self[1][1] * self[2][0]
-
+        return np.linalg.det(self._np).item()
 
 # Vector supports 1D, 2D and 3D Vectors, as well as calculations between them
 # Arithmetic with 1D and 2D lists/tuples aren't supported - just set the remaining values to 0 manually
 # With this new setup, Vector is much faster because it's just a wrapper for numpy
 class Vector:
-    def __init__(self, x: float = 0, y: float = 0, z: float = 0):
+    def __init__(self, x: float = 0, y: float = 0, z: float = 0, np_arr=None):
         # this is a private property - this is so all other things treat this class like a list, and so should you!
-        self._np = np.array([x, y, z])
+        self._np = np.array([x, y, z]) if np_arr is None else np_arr
 
     def __getitem__(self, index):
         return self._np[index].item()
@@ -855,20 +956,20 @@ class Vector:
 
     # -self
     def __neg__(self):
-        return Vector(*(self._np * -1))
+        return Vector(np_arr=self._np * -1)
 
     # self + value
     def __add__(self, value):
         if hasattr(value, "_np"):
             value = value._np
-        return Vector(*(self._np+value))
+        return Vector(np_arr=self._np+value)
     __radd__ = __add__
 
     # self - value
     def __sub__(self, value):
         if hasattr(value, "_np"):
             value = value._np
-        return Vector(*(self._np-value))
+        return Vector(np_arr=self._np-value)
 
     def __rsub__(self, value):
         return -self + value
@@ -877,14 +978,14 @@ class Vector:
     def __mul__(self, value):
         if hasattr(value, "_np"):
             value = value._np
-        return Vector(*(self._np*value))
+        return Vector(np_arr=self._np*value)
     __rmul__ = __mul__
 
     # self / value
     def __truediv__(self, value):
         if hasattr(value, "_np"):
             value = value._np
-        return Vector(*(self._np/value))
+        return Vector(np_arr=self._np/value)
 
     def __rtruediv__(self, value):
         return self * (1 / value)
@@ -892,7 +993,7 @@ class Vector:
     # round(self)
     def __round__(self, decimals=0) -> Vector:
         # Rounds all of the values
-        return Vector(*np.around(self._np, decimals=decimals))
+        return Vector(np_arr=np.around(self._np, decimals=decimals))
 
     @staticmethod
     def from_vector(vec) -> Vector:
@@ -902,17 +1003,21 @@ class Vector:
         # Returns the length of the vector
         return np.linalg.norm(self._np).item()
 
+    def _magnitude(self) -> np.float64:
+        # Returns the length of the vector in a numpy float 64
+        return np.linalg.norm(self._np)
+
     def dot(self, value: Vector) -> float:
         # Returns the dot product of two vectors
         if hasattr(value, "_np"):
             value = value._np
-        return np.dot(self._np, value).item()
+        return self._np.dot(value).item()
 
     def cross(self, value: Vector) -> Vector:
         # Returns the cross product of two vectors
         if hasattr(value, "_np"):
             value = value._np
-        return Vector(*np.cross(self._np, value))
+        return Vector(np_arr=np.cross(self._np, value))
 
     def copy(self) -> Vector:
         # Returns a copy of the vector
@@ -921,15 +1026,22 @@ class Vector:
     def normalize(self, return_magnitude=False) -> List[Vector, float] or Vector:
         # normalize() returns a Vector that shares the same direction but has a length of 1
         # normalize(True) can also be used if you'd like the length of this Vector (used for optimization)
-        magnitude = self.magnitude()
+        magnitude = self._magnitude()
         if magnitude != 0:
-            norm_vec = Vector(*(self._np / magnitude))
+            norm_vec = Vector(np_arr=self._np / magnitude)
             if return_magnitude:
-                return norm_vec, magnitude
+                return norm_vec, magnitude.item()
             return norm_vec
         if return_magnitude:
             return Vector(), 0
         return Vector()
+
+    def _normalize(self) -> np.ndarray:
+        # Normalizes a Vector and returns a numpy array
+        magnitude = self._magnitude()
+        if magnitude != 0:
+            return self._np / magnitude
+        return np.array((0, 0, 0))
 
     def flatten(self) -> Vector:
         # Sets Z (Vector[2]) to 0, making the Vector 2D
@@ -941,7 +1053,8 @@ class Vector:
 
     def angle(self, value: Vector) -> float:
         # Returns the angle between this Vector and another Vector in radians
-        return math.acos(max(min(np.dot(self.normalize()._np, value.normalize()._np).item(), 1), -1))
+        dp = np.dot(self._normalize(), value._normalize()).item()
+        return math.acos(-1 if dp < -1 else (1 if dp > 1 else dp))
 
     def rotate2D(self, angle: float) -> Vector:
         # Rotates this Vector by the given angle in radians
@@ -952,7 +1065,7 @@ class Vector:
         # Similar to integer clamping, Vector's clamp2D() forces the Vector's direction between a start and end Vector
         # Such that Start < Vector < End in terms of clockwise rotation
         # Note that this is only 2D, in the x and y axis
-        s = self.normalize()._np
+        s = self._normalize()
         right = np.dot(s, np.cross(end._np, (0, 0, -1))) < 0
         left = np.dot(s, np.cross(start._np, (0, 0, -1))) > 0
         if (right and left) if np.dot(end._np, np.cross(start._np, (0, 0, -1))) > 0 else (right or left):
@@ -992,7 +1105,7 @@ class Vector:
         # Midpoint of the 2 vectors
         if hasattr(value, "_np"):
             value = value._np
-        return Vector(*((self._np + value) / 2))
+        return Vector(np_arr=(self._np + value) / 2)
 
     def scale(self, value: float) -> Vector:
         # Returns a vector that has the same direction but with a value as the magnitude

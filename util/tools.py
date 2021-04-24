@@ -194,7 +194,7 @@ def get_slices(agent, cap_):
         time_remaining = agent.stack[0].intercept_time - agent.time
         if 0 < time_remaining < 0.5:
             return
-            
+
         # if the shot is done but it's working on it's 'follow through', then ignore this stuff
         if time_remaining > 0:
             # Convert the time remaining into number of slices, and take off the minimum gain accepted from the time

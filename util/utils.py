@@ -99,7 +99,9 @@ def defaultThrottle(agent: VirxERLU, target_speed, target_angles=None, local_tar
     # if the desired acceleration is big enough, use boost
     elif throttle_boost_transition < acceleration:
         agent.controller.throttle = 1
-        if t > 0 and not agent.controller.handbrake and angle_to_target < 1: agent.controller.boost = True  # don't boost when we need to lose speed, we we're using handbrake, or when we aren't facing the target
+        if not agent.controller.handbrake:
+            if t > 0 and angle_to_target < 1:
+                agent.controller.boost = True  # don't boost when we need to lose speed, we we're using handbrake, or when we aren't facing the target
 
     if car_speed < 0:
         agent.controller.throttle *= -1  # earlier we flipped the sign of the acceleration, so we have to flip the sign of the throttle for it to be correct
@@ -112,6 +114,34 @@ def defaultDrive(agent: VirxERLU, target_speed, local_target):
     velocity = defaultThrottle(agent, target_speed, target_angles, local_target)
 
     return target_angles, velocity
+
+
+def get_max_speed_from_local_point(point):
+    turn_rad = max(abs(point.x), abs(point.y))
+    return curvature_to_velocity(1 / turn_rad)
+
+
+def curvature_to_velocity(curve):
+    curve = cap(curve, 0.00088, 0.0069)
+    if 0.00088 <= curve <= 0.00110:
+        u = (curve - 0.00088) / (0.00110 - 0.00088)
+        return lerp(2300, 1750, u)
+
+    if 0.00110 <= curve <= 0.00138:
+        u = (curve - 0.00110) / (0.00138 - 0.00110)
+        return lerp(1750, 1500, u)
+
+    if 0.00138 <= curve <= 0.00235:
+        u = (curve - 0.00138) / (0.00235 - 0.00138)
+        return lerp(1500, 1000, u)
+
+    if 0.00235 <= curve <= 0.00398:
+        u = (curve - 0.00235) / (0.00398 - 0.00235)
+        return lerp(1000, 500, u)
+
+    if 0.00398 <= curve <= 0.0069:
+        u = (curve - 0.00398) / (0.0069 - 0.00398)
+        return lerp(500, 0, u)
 
 
 def throttle_acceleration(car_velocity_x):
@@ -146,7 +176,7 @@ def curvature(v):
     # v is the magnitude of the velocity in the car's forward direction
     if 0 <= v < 500:
         return 0.0069 - 5.84e-6 * v
-        
+
     if 500 <= v < 1000:
         return 0.00561 - 3.26e-6 * v
 
@@ -308,7 +338,7 @@ def ray_intersects_with_line(origin, direction, point1, point2):
         return t1
 
 
-def ray_intersects_with_sphere(origin, direction, center, radius):
+def ray_intersects_with_circle(origin, direction, center, radius):
     L = center - origin
     tca = L.dot(direction)
 
@@ -319,9 +349,79 @@ def ray_intersects_with_sphere(origin, direction, center, radius):
 
     if d2 > radius:
         return False
-    
+
     thc = math.sqrt(radius * radius - d2)
     t0 = tca - thc
     t1 = tca + thc
 
     return t0 > 0 or t1 > 0
+
+
+def min_non_neg(x, y):
+    return x if (x < y and x >= 0) or (y < 0 and x >= 0) else y
+
+
+# solve for x
+# y = a(x - h)^2 + k
+# y - k = a(x - h)^2
+# (y - k) / a = (x - h)^2
+# sqrt((y - k) / a) = x - h
+# sqrt((y - k) / a) + h = x
+def vertex_quadratic_solve_for_x_min_non_neg(a, h, k, y):
+    try:
+        v_sqrt = math.sqrt((y - k) / a)
+    except ValueError:
+        return 0
+    return min_non_neg(v_sqrt + h, -v_sqrt + h)
+
+
+def get_landing_time(fall_distance, falling_time_until_terminal_velocity, falling_distance_until_terminal_velocity, terminal_velocity, k, h, g):
+    return vertex_quadratic_solve_for_x_min_non_neg(g, h, k, fall_distance) if (fall_distance * sign(-g) <= falling_distance_until_terminal_velocity * sign(-g)) else falling_time_until_terminal_velocity + ((fall_distance - falling_distance_until_terminal_velocity) / terminal_velocity)
+
+
+def find_landing_plane(l: Vector, v: Vector, g: float):
+    if abs(l.y) >= 5120 or (v.x == 0 and v.y == 0 and g == 0):
+        return 5
+
+    times = [ -1, -1, -1, -1, -1, -1 ] #  side_wall_pos, side_wall_neg, back_wall_pos, back_wall_neg, ceiling, floor
+
+    if v.x != 0:
+        times[0] = (4080 - l.x) / v.x
+        times[1] = (-4080 - l.x) / v.x
+
+    if v.y != 0:
+        times[2] = (5110 - l.y) / v.y
+        times[3] = (-5110 - l.y) / v.y
+
+    if g != 0:
+        # this is the vertex of the equation, which also happens to be the apex of the trajectory
+        h = v.z / -g # time to apex
+        k = v.z * v.z / -g # vertical height at apex
+
+        # a is the current gravity... because reasons
+        # a = g
+
+        climb_dist = -l.z
+
+        # if the gravity is inverted, the the ceiling becomes the floor and the floor becomes the ceiling...
+        if g < 0:
+            climb_dist += 2030
+            if k >= climb_dist:
+                times[4] = vertex_quadratic_solve_for_x_min_non_neg(g, h, k, climb_dist)
+        elif g > 0:
+            climb_dist += 20
+            if k <= climb_dist:
+                times[5] = vertex_quadratic_solve_for_x_min_non_neg(g, h, k, climb_dist)
+
+        # this is necessary because after we reach our terminal velocity, the equation becomes linear (distance_remaining / terminal_velocity)
+        terminal_velocity = (2300 - v.flatten().magnitude()) * sign(g)
+        falling_time_until_terminal_velocity = (terminal_velocity - v.z) / g
+        falling_distance_until_terminal_velocity = v.z * falling_time_until_terminal_velocity + -g * (falling_time_until_terminal_velocity * falling_time_until_terminal_velocity) / 2.
+
+        fall_distance = -l.z
+        if g < 0:
+            times[5] = get_landing_time(fall_distance + 20, falling_time_until_terminal_velocity, falling_distance_until_terminal_velocity, terminal_velocity, k, h, g)
+        else:
+            times[4] = get_landing_time(fall_distance + 2030, falling_time_until_terminal_velocity, falling_distance_until_terminal_velocity, terminal_velocity, k, h, g)
+
+    return times.index(min(item for item in times if item >= 0))
