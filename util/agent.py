@@ -238,7 +238,7 @@ class VirxERLU(StandaloneBot):
         return len(self.stack) < 1
 
     def preprocess(self, packet: GameTickPacket):
-        if packet.num_cars != len(self.friends)+len(self.foes)+1:
+        if packet.num_cars != len(self.friends)+len(self.foes)+1 or self.odd_tick == 0:
             self.refresh_player_lists(packet)
 
         set(map(lambda car: car.update(packet), self.friends))
