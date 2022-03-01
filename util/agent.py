@@ -7,11 +7,10 @@ import re
 from datetime import datetime
 from time import time_ns
 from traceback import print_exc
-from typing import List, Optional
+from typing import Optional, Tuple
 
 import numpy as np
 from rlbot.agents.base_agent import BaseAgent, SimpleControllerState
-from rlbot.messages.flat import MatchSettings
 from rlbot.utils.rendering.rendering_manager import Color
 from rlbot.utils.structures.game_data_struct import (GameTickPacket, Rotator,
                                                      Vector3)
@@ -149,7 +148,7 @@ class VirxERLU(BaseAgent):
         if not self.tournament and self.extra_debugging:
             self.gui.stop()
 
-    def is_hot_reload_enabled(self):
+    def is_hot_reload_enabled(self) -> bool:
         # The tkinter GUI isn't compatible with hot reloading
         # Use the Continue and Spawn option in the RLBotGUI instead
         return not self.extra_debugging
@@ -173,22 +172,16 @@ class VirxERLU(BaseAgent):
         self.ready = True
 
     def refresh_player_lists(self, packet: GameTickPacket):
-        match_settings = self.get_match_settings()
         # Useful to keep separate from get_ready because humans can join/leave a match
         self.friends = tuple(car_object(i, packet) for i in range(packet.num_cars) if packet.game_cars[i].team is self.team and i != self.index)
         self.foes = tuple(car_object(i, packet) for i in range(packet.num_cars) if packet.game_cars[i].team != self.team)
         self.me = car_object(self.index, packet)
-
-        try:
-            true_name = match_settings.PlayerConfigurations(self.index).Name()
-            self.true_name = true_name
-        except Exception:
-            print(f"{self.name}: I appear to have been forcefully pushed into a match! How rude.")
+        self.true_name = self.me.true_name
 
     def push(self, routine: BaseRoutine):
         self.stack.append(routine)
 
-    def pop(self):
+    def pop(self) -> BaseRoutine:
         return self.stack.pop()
 
     def line(self, start: Vector, end: Vector, color=None):
@@ -236,7 +229,7 @@ class VirxERLU(BaseAgent):
         self.shooting = False
         self.stack = []
 
-    def is_clear(self):
+    def is_clear(self) -> bool:
         return len(self.stack) < 1
 
     def preprocess(self, packet: GameTickPacket):
@@ -291,11 +284,11 @@ class VirxERLU(BaseAgent):
                 except Exception:
                     print_exc()
 
-    def is_shooting(self):
+    def is_shooting(self) -> bool:
         stack_routine_name = '' if self.is_clear() else self.stack[0].__class__.__name__
         return stack_routine_name in {'Aerial', 'jump_shot', 'double_jump', 'ground_shot', 'short_shot'}
 
-    def get_output(self, packet: GameTickPacket):
+    def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
         try:
             # Reset controller
             self.controller.__init__(use_item=True)
@@ -408,11 +401,11 @@ class VirxERLU(BaseAgent):
             print_exc(file=open(t_file, "a"))
             return SimpleControllerState()
 
-    def get_minimum_game_time_to_ball(self):
+    def get_minimum_game_time_to_ball(self) -> float:
         # It is recommended that you override this
         return -1
 
-    def tmcp_packet_is_different(self, tmcp_packet):
+    def tmcp_packet_is_different(self, tmcp_packet: dict) -> bool:
         # If you're looking to overwrite this, you might want to do a version check
 
         # If the packets are the same
@@ -442,7 +435,7 @@ class VirxERLU(BaseAgent):
         # Right now, this is only for DEFEND
         return False
 
-    def create_tmcp_packet(self):
+    def create_tmcp_packet(self) -> dict:
         # https://github.com/RLBot/RLBot/wiki/Team-Match-Communication-Protocol
         # don't worry about duplicate packets - this is handled automatically
         tmcp_packet = {
@@ -484,7 +477,7 @@ class VirxERLU(BaseAgent):
         }
         return tmcp_packet
 
-    def handle_tmcp_packet(self, packet):
+    def handle_tmcp_packet(self, packet: dict):
         # https://github.com/RLBot/RLBot/wiki/Team-Match-Communication-Protocol
 
         for friend in self.friends:
@@ -512,7 +505,7 @@ class BaseRoutine:
 class car_object:
     # objects convert the gametickpacket in something a little friendlier to use
     # and are automatically updated by VirxERLU as the game runs
-    def __init__(self, index: int, packet: GameTickPacket=None, match_settings: MatchSettings=None):
+    def __init__(self, index: int, packet: Optional[GameTickPacket]=None):
         self.location = Vector()
         self.orientation = Matrix3()
         self.velocity = Vector()
@@ -528,12 +521,6 @@ class car_object:
         self.tmcp_action = None
         self.true_name = None
         self.land_time = 0
-
-        if match_settings is not None:
-            try:
-                self.true_name = match_settings.PlayerConfigurations(index).Name()
-            except Exception:
-                pass
 
         if packet is not None:
             car = packet.game_cars[self.index]
@@ -552,15 +539,15 @@ class car_object:
         self.team = -1
         self.hitbox = hitbox_object()
 
-    def local(self, value: Vector):
+    def local(self, value: Vector) -> Vector:
         # Generic localization
         return self.orientation.dot(value)
 
-    def global_(self, value: Vector):
+    def global_(self, value: Vector) -> Vector:
         # Converts a localized vector to a global vector
         return self.orientation.g_dot(value)
 
-    def local_velocity(self, velocity: Vector=None):
+    def local_velocity(self, velocity: Optional[Vector]=None) -> Vector:
         # Returns the velocity of an item relative to the car
         # x is the velocity forwards (+) or backwards (-)
         # y is the velocity to the right (+) or left (-)
@@ -570,22 +557,22 @@ class car_object:
 
         return self.local(velocity)
 
-    def local_location(self, location: Vector):
+    def local_location(self, location: Vector) -> Vector:
         # Returns the location of an item relative to the car
         # x is how far the location is forwards (+) or backwards (-)
         # y is the velocity to the right (+) or left (-)
         # z is how far the location is upwards (+) or downwards (-)
         return self.local(location - self.location)
 
-    def global_location(self, location: Vector):
+    def global_location(self, location: Vector) -> Vector:
         # Converts a localized location to a global location
         return self.global_(location) + self.location
 
-    def local_flatten(self, value: Vector):
+    def local_flatten(self, value: Vector) -> Vector:
         # Flattens a vector relative to the car
         return self.global_(self.local(value).flatten())
 
-    def local_flatten_location(self, location: Vector):
+    def local_flatten_location(self, location: Vector) -> Vector:
         # Flattens a location relative to the car
         return self.global_location(self.local_location(location).flatten())
 
@@ -608,33 +595,33 @@ class car_object:
             self.land_time = packet.game_info.seconds_elapsed
 
     @property
-    def rotation(self):
+    def rotation(self) -> Tuple[Vector, Vector, Vector]:
         return self.orientation.rotation
 
     @property
-    def pitch(self):
+    def pitch(self) -> float:
         return self.orientation.pitch
 
     @property
-    def yaw(self):
+    def yaw(self) -> float:
         return self.orientation.yaw
 
     @property
-    def roll(self):
+    def roll(self) -> float:
         return self.orientation.roll
 
     @property
-    def forward(self):
+    def forward(self) -> Vector:
         # A vector pointing forwards relative to the cars orientation. Its magnitude == 1
         return self.orientation.forward
 
     @property
-    def right(self):
+    def right(self) -> Vector:
         # A vector pointing left relative to the cars orientation. Its magnitude == 1
         return self.orientation.right
 
     @property
-    def up(self):
+    def up(self) -> Vector:
         # A vector pointing up relative to the cars orientation. Its magnitude == 1
         return self.orientation.up
 
@@ -653,7 +640,7 @@ class hitbox_object:
         return (self.length, self.width, self.height)[index]
 
     # len(self)
-    def __len__(self):
+    def __len__(self) -> int:  # Literal[3]:
         return 3  # this is a 3 dimensional vector, so we return 3
 
     # str(self)
@@ -794,7 +781,6 @@ class Matrix3:
 
         if simple:
             self._np = np.array(((0, 0, 0), (0, 0, 0), (0, 0, 0)))
-            self.rotation = (Vector(), Vector(), Vector())
             return
 
         CP = math.cos(self.pitch)
@@ -810,24 +796,26 @@ class Matrix3:
             (-CR*CY*SP-SR*SY, -CR*SY*SP+SR*CY, CP*CR)
         ))
 
-        self.rotation = tuple(Vector(*item) for item in self._np)
+    @property
+    def rotation(self) -> Tuple[Vector, Vector, Vector]:
+        return tuple(Vector(*item) for item in self._np)
 
     @property
-    def forward(self):
-        return self.rotation[0]
+    def forward(self) -> Vector:
+        return Vector(*self._np[0])
 
     @property
-    def right(self):
-        return self.rotation[1]
+    def right(self) -> Vector:
+        return Vector(*self._np[1])
 
     @property
-    def up(self):
-        return self.rotation[2]
+    def up(self) -> Vector:
+        return Vector(*self._np[2])
 
-    def __getitem__(self, key: int):
+    def __getitem__(self, key: int) -> Vector:
         return self.rotation[key]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"[{self.forward}\n {self.right}\n {self.up}]"
 
     @staticmethod
@@ -865,7 +853,7 @@ class Matrix3:
             vec = vec._np
         return Vector(np_arr=self._np[0].dot(vec[0]) + self._np[1].dot(vec[1]) + self._np[2].dot(vec[2]))
 
-    def det(self):
+    def det(self) -> Vector:
         return np.linalg.det(self._np).item()
 
 # Vector supports 1D, 2D and 3D Vectors, as well as calculations between them
@@ -997,7 +985,7 @@ class Vector:
         # Returns a copy of the vector
         return Vector(*self._np)
 
-    def normalize(self, return_magnitude: bool=False) -> List[Vector, float] or Vector:
+    def normalize(self, return_magnitude: bool=False) -> Tuple[Vector, float] | Vector:
         # normalize() returns a Vector that shares the same direction but has a length of 1
         # normalize(True) can also be used if you'd like the length of this Vector (used for optimization)
         magnitude = self._magnitude()

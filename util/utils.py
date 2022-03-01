@@ -235,12 +235,12 @@ def quadratic(a: float, b: float, c: float) -> Tuple[float, float]:
     return (b + inside)/a, (b - inside)/a
 
 
-def side(x: int) -> int:
+def side(x: int) -> int:  # Literal[-1, 1]:
     # returns -1 for blue team and 1 for orange team
     return (-1, 1)[x]
 
 
-def sign(x: float) -> int:
+def sign(x: float) -> int:  # Literal[-1, 0, 1]:
     # returns the sign of a number, -1, 0, +1
     if x < 0:
         return -1
