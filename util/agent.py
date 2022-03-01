@@ -182,6 +182,8 @@ class VirxERLU(BaseAgent):
         self.stack.append(routine)
 
     def pop(self) -> BaseRoutine:
+        if hasattr(self.stack[-1], "pre_pop"):
+            self.stack[-1].pre_pop()
         return self.stack.pop()
 
     def line(self, start: Vector, end: Vector, color=None):
@@ -500,6 +502,9 @@ class VirxERLU(BaseAgent):
 class BaseRoutine:
     def run(self, agent: VirxERLU):
         raise NotImplementedError
+
+    def pre_pop(self, agent: VirxERLU):
+        pass
 
 
 class car_object:
