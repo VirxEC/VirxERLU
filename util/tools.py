@@ -1,14 +1,19 @@
-from virx_erlu_rlib import ShotType
+from enum import Enum
 
-# from util.routines import Aerial, double_jump, ground_shot, jump_shot
-from util.routines import ground_shot
-from util.utils import Vector, cap
+from util.routines import Aerial, double_jump, ground_shot, jump_shot, virxrlcu
+from util.utils import Vector, cap, math, side
+
+class ShotType(Enum):
+    GROUND = 0
+    JUMP = 1
+    DOUBLE_JUMP = 2
+    AERIAL = 3
 
 
 SHOT_SWITCH = {
     ShotType.GROUND: ground_shot,
-    # ShotType.JUMP: jump_shot,
-    # ShotType.DOUBLE_JUMP: double_jump
+    ShotType.JUMP: jump_shot,
+    ShotType.DOUBLE_JUMP: double_jump
 }
 
 
