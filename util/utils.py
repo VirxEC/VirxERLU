@@ -38,8 +38,9 @@ def defaultPD(agent: VirxERLU, local_target: Vector, upside_down: bool=False, up
         math.atan2(local_target.y, local_target.x),  # angle required to yaw towards target
         math.atan2(up.y, up.z)  # angle required to roll upright
     )
+
     # Once we have the angles we need to rotate, we feed them into PD loops to determing the controller inputs
-    agent.controller.steer = steerPD(target_angles[1], 0)
+    agent.controller.steer = cap(3.4 * target_angles[0] + 0.235 * agent.me.angular_velocity.z, -1, 1)  # Use RLU PID to steer towards target
     agent.controller.pitch = steerPD(target_angles[0], agent.me.angular_velocity.y/4)
     agent.controller.yaw = steerPD(target_angles[1], -agent.me.angular_velocity.z/4)
     agent.controller.roll = steerPD(target_angles[2], agent.me.angular_velocity.x/4)
