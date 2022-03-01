@@ -11,6 +11,6 @@ class ground_shot(BaseRoutine):
     def run(self, agent: VirxERLU):
         pass
 
-    def pop(self, agent: VirxERLU):
+    def pre_pop(self, agent: VirxERLU):
         rlru.remove_target(self.target)
 
