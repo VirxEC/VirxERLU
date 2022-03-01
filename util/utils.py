@@ -1,6 +1,8 @@
+import math
 from queue import Full
+from typing import Generator, Optional, Tuple
 
-from util.agent import Vector, VirxERLU, math
+from util.agent import Vector, VirxERLU
 
 COAST_ACC = 525.0
 BRAKE_ACC = 3500
@@ -17,7 +19,7 @@ def cap(x, low, high):
     return low if x < low else (high if x > high else x)
 
 
-def cap_in_field(agent: VirxERLU, target):
+def cap_in_field(agent: VirxERLU, target: Vector) -> Vector:
     if abs(target.x) > 893 - agent.me.hitbox.length:
         target.y = cap(target.y, -5120 + agent.me.hitbox.length, 5120 - agent.me.hitbox.length)
     target.x = cap(target.x, -893 + agent.me.hitbox.length, 893 - agent.me.hitbox.length) if abs(agent.me.location.y) > 5120 - (agent.me.hitbox.length / 2) else cap(target.x, -4093 + agent.me.hitbox.length, 4093 - agent.me.hitbox.length)
@@ -25,7 +27,7 @@ def cap_in_field(agent: VirxERLU, target):
     return target
 
 
-def defaultPD(agent: VirxERLU, local_target, upside_down=False, up=None):
+def defaultPD(agent: VirxERLU, local_target: Vector, upside_down: bool=False, up: Optional[Vector]=None) -> Tuple[float, float, float]:
     # points the car towards a given local target.
     # Direction can be changed to allow the car to steer towards a target while driving backwards
 
@@ -45,7 +47,7 @@ def defaultPD(agent: VirxERLU, local_target, upside_down=False, up=None):
     return target_angles
 
 
-def defaultThrottle(agent: VirxERLU, target_speed, target_angles=None, local_target=None):
+def defaultThrottle(agent: VirxERLU, target_speed: float, target_angles: Optional[Tuple[float, float, float]]=None, local_target: Optional[Vector]=None) -> float:
     # accelerates the car to a desired speed using throttle and boost
     car_speed = agent.me.forward.dot(agent.me.velocity)
 
@@ -109,19 +111,19 @@ def defaultThrottle(agent: VirxERLU, target_speed, target_angles=None, local_tar
     return car_speed
 
 
-def defaultDrive(agent: VirxERLU, target_speed, local_target):
+def defaultDrive(agent: VirxERLU, target_speed: float, local_target: Vector) -> Tuple[Tuple[Vector, Vector, Vector], float]:
     target_angles = defaultPD(agent, local_target)
     velocity = defaultThrottle(agent, target_speed, target_angles, local_target)
 
     return target_angles, velocity
 
 
-def get_max_speed_from_local_point(point):
+def get_max_speed_from_local_point(point: Vector) -> float:
     turn_rad = max(abs(point.x), abs(point.y))
     return curvature_to_velocity(1 / turn_rad)
 
 
-def curvature_to_velocity(curve):
+def curvature_to_velocity(curve: float) -> float:
     curve = cap(curve, 0.00088, 0.0069)
     if 0.00088 <= curve <= 0.00110:
         u = (curve - 0.00088) / (0.00110 - 0.00088)
@@ -144,7 +146,7 @@ def curvature_to_velocity(curve):
         return lerp(500, 0, u)
 
 
-def throttle_acceleration(car_velocity_x):
+def throttle_acceleration(car_velocity_x: float) -> float:
     x = abs(car_velocity_x)
     if x >= 1410:
         return 0
@@ -157,7 +159,7 @@ def throttle_acceleration(car_velocity_x):
     return -16 * x + 160
 
 
-def is_inside_turn_radius(turn_rad, local_target, steer_direction):
+def is_inside_turn_radius(turn_rad: float, local_target: Vector, steer_direction: int) -> bool:
     # turn_rad is the turn radius
     local_target = local_target.flatten()
     circle = Vector(y=-steer_direction * turn_rad)
@@ -165,14 +167,14 @@ def is_inside_turn_radius(turn_rad, local_target, steer_direction):
     return circle.dist(local_target) < turn_rad
 
 
-def turn_radius(v):
+def turn_radius(v: float) -> float:
     # v is the magnitude of the velocity in the car's forward direction
     if v == 0:
         return 0
     return 1.0 / curvature(v)
 
 
-def curvature(v):
+def curvature(v: float) -> float:
     # v is the magnitude of the velocity in the car's forward direction
     if 0 <= v < 500:
         return 0.0069 - 5.84e-6 * v
@@ -192,13 +194,13 @@ def curvature(v):
     return 0
 
 
-def in_field(point, radius):
+def in_field(point: Vector, radius: float) -> bool:
     # determines if a point is inside the standard soccer field
     point = Vector(abs(point.x), abs(point.y), abs(point.z))
     return not (point.x > 4080 - radius or point.y > 5900 - radius or (point.x > 880 - radius and point.y > 5105 - radius) or (point.x > 2650 and point.y > -point.x + 8025 - radius))
 
 
-def find_slope(shot_vector, car_to_target):
+def find_slope(shot_vector: Vector, car_to_target: Vector) -> float:
     # Finds the slope of your car's position relative to the shot vector (shot vector is y axis)
     # 10 = you are on the axis and the ball is between you and the direction to shoot in
     # -10 = you are on the wrong side
@@ -212,7 +214,7 @@ def find_slope(shot_vector, car_to_target):
     return cap(f, -3, 3)
 
 
-def quadratic(a, b, c):
+def quadratic(a: float, b: float, c: float) -> Tuple[float, float]:
     # Returns the two roots of a quadratic
     inside = (b*b) - (4*a*c)
 
@@ -230,15 +232,15 @@ def quadratic(a, b, c):
     if inside == 0:
         return (b/a,)
 
-    return ((b + inside)/a, (b - inside)/a)
+    return (b + inside)/a, (b - inside)/a
 
 
-def side(x):
+def side(x: int) -> int:
     # returns -1 for blue team and 1 for orange team
     return (-1, 1)[x]
 
 
-def sign(x):
+def sign(x: float) -> int:
     # returns the sign of a number, -1, 0, +1
     if x < 0:
         return -1
@@ -249,7 +251,7 @@ def sign(x):
     return 0
 
 
-def steerPD(angle, rate):
+def steerPD(angle: float, rate: float) -> float:
     # A Proportional-Derivative control loop used for defaultPD
     return cap(((35*(angle+rate))**3)/10, -1, 1)
 
@@ -268,7 +270,7 @@ def invlerp(a, b, v):
     return (v - a) / (b - a)
 
 
-def send_comm(agent: VirxERLU, msg):
+def send_comm(agent: VirxERLU, msg: dict):
     message = {
         "index": agent.index,
         "team": agent.team
@@ -282,18 +284,18 @@ def send_comm(agent: VirxERLU, msg):
         agent.print("Outgoing broadcast is full; couldn't send message")
 
 
-def peek_generator(generator):
+def peek_generator(generator: Generator):
     try:
         return next(generator)
     except StopIteration:
         return
 
 
-def almost_equals(x, y, threshold):
+def almost_equals(x: float, y: float, threshold: float) -> bool:
     return x - threshold < y and y < x + threshold
 
 
-def point_inside_quadrilateral_2d(point, quadrilateral):
+def point_inside_quadrilateral_2d(point: Vector, quadrilateral: Tuple[Vector, Vector, Vector, Vector]) -> bool:
     # Point is a 2d vector
     # Quadrilateral is a tuple of 4 2d vectors, in either a clockwise or counter-clockwise order
     # See https://stackoverflow.com/a/16260220/10930209 for an explanation
@@ -308,11 +310,11 @@ def point_inside_quadrilateral_2d(point, quadrilateral):
     return almost_equals(actual_area, quadrilateral_area, 0.001)
 
 
-def perimeter_of_ellipse(a,b):
+def perimeter_of_ellipse(a: float, b: float) -> bool:
     return math.pi * (3*(a+b) - math.sqrt((3*a + b) * (a + 3*b)))
 
 
-def dodge_impulse(agent):
+def dodge_impulse(agent: VirxERLU) -> float:
     car_speed = agent.me.velocity.magnitude()
     impulse = 500 * (1 + 0.9 * (car_speed / 2300))
     dif = car_speed + impulse - 2300
@@ -321,7 +323,7 @@ def dodge_impulse(agent):
     return impulse
 
 
-def ray_intersects_with_line(origin, direction, point1, point2):
+def ray_intersects_with_line(origin: Vector, direction: Vector, point1: Vector, point2: Vector) -> Vector:
     v1 = origin - point1
     v2 = point2 - point1
     v3 = Vector(-direction.y, direction.x)
@@ -338,7 +340,7 @@ def ray_intersects_with_line(origin, direction, point1, point2):
         return t1
 
 
-def ray_intersects_with_circle(origin, direction, center, radius):
+def ray_intersects_with_circle(origin: Vector, direction: Vector, center: Vector, radius: float) -> bool:
     L = center - origin
     tca = L.dot(direction)
 
@@ -357,7 +359,7 @@ def ray_intersects_with_circle(origin, direction, center, radius):
     return t0 > 0 or t1 > 0
 
 
-def min_non_neg(x, y):
+def min_non_neg(x: float, y: float) -> float:
     return x if (x < y and x >= 0) or (y < 0 and x >= 0) else y
 
 
@@ -367,7 +369,7 @@ def min_non_neg(x, y):
 # (y - k) / a = (x - h)^2
 # sqrt((y - k) / a) = x - h
 # sqrt((y - k) / a) + h = x
-def vertex_quadratic_solve_for_x_min_non_neg(a, h, k, y):
+def vertex_quadratic_solve_for_x_min_non_neg(a: float, h: float, k: float, y: float) -> float:
     try:
         v_sqrt = math.sqrt((y - k) / a)
     except ValueError:
@@ -375,11 +377,11 @@ def vertex_quadratic_solve_for_x_min_non_neg(a, h, k, y):
     return min_non_neg(v_sqrt + h, -v_sqrt + h)
 
 
-def get_landing_time(fall_distance, falling_time_until_terminal_velocity, falling_distance_until_terminal_velocity, terminal_velocity, k, h, g):
+def get_landing_time(fall_distance: float, falling_time_until_terminal_velocity: float, falling_distance_until_terminal_velocity: float, terminal_velocity: float, k: float, h: float, g: float) -> float:
     return vertex_quadratic_solve_for_x_min_non_neg(g, h, k, fall_distance) if (fall_distance * sign(-g) <= falling_distance_until_terminal_velocity * sign(-g)) else falling_time_until_terminal_velocity + ((fall_distance - falling_distance_until_terminal_velocity) / terminal_velocity)
 
 
-def find_landing_plane(l: Vector, v: Vector, g: float):
+def find_landing_plane(l: Vector, v: Vector, g: float) -> int:
     if abs(l.y) >= 5120 or (v.x == 0 and v.y == 0 and g == 0):
         return 5
 
