@@ -7,13 +7,15 @@ import re
 from datetime import datetime
 from time import time_ns
 from traceback import print_exc
-from typing import List, Tuple
+from typing import List, Optional
 
 import numpy as np
-from rlbot.agents.base_agent import SimpleControllerState
-from rlbot.agents.standalone.standalone_bot import StandaloneBot, run_bot
+from rlbot.agents.base_agent import BaseAgent, SimpleControllerState
 from rlbot.messages.flat import MatchSettings
-from rlbot.utils.structures.game_data_struct import GameTickPacket
+from rlbot.utils.rendering.rendering_manager import Color
+from rlbot.utils.structures.game_data_struct import (GameTickPacket, Rotator,
+                                                     Vector3)
+from rlbot.utils.structures.quick_chats import QuickChats
 
 # If you're putting your bot in the botpack, or submitting to a tournament, make this True!
 TOURNAMENT_MODE = False
@@ -25,11 +27,11 @@ if not TOURNAMENT_MODE and EXTRA_DEBUGGING:
     from gui import Gui
 
 
-class VirxERLU(StandaloneBot):
+class VirxERLU(BaseAgent):
     # Massive thanks to ddthj/GoslingAgent (GitHub repo) for the basis of VirxERLU
     # VirxERLU on VirxEC Showcase -> https://virxerlu.virxcase.dev/
     # Wiki -> https://github.com/VirxEC/VirxERLU/wiki
-    def __init__(self, name, team, index):
+    def __init__(self, name: str, team: int, index: int):
         super().__init__(name, team, index)
         self.tournament = TOURNAMENT_MODE
         self.extra_debugging = EXTRA_DEBUGGING
@@ -111,20 +113,20 @@ class VirxERLU(StandaloneBot):
         self.game_mode = game_mode[match_settings.GameMode()]
         self.ball_radius = 92.75
 
-        self.friends = ()
-        self.foes = ()
+        self.friends: list[car_object] = ()
+        self.foes: list[car_object] = ()
         self.me = car_object(self.index)
         self.ball_to_goal = -1
 
         self.ball = ball_object()
         self.game = game_object()
 
-        self.boosts = ()
+        self.boosts: list[boost_object] = ()
 
         self.friend_goal = goal_object(self.team)
         self.foe_goal = goal_object(not self.team)
 
-        self.stack = []
+        self.stack: list[BaseRoutine] = []
         self.time = 0
 
         self.ready = False
@@ -152,7 +154,7 @@ class VirxERLU(StandaloneBot):
         # Use the Continue and Spawn option in the RLBotGUI instead
         return not self.extra_debugging
 
-    def get_ready(self, packet):
+    def get_ready(self, packet: GameTickPacket):
         field_info = self.get_field_info()
         self.boosts = tuple(boost_object(i, field_info.boost_pads[i].location, field_info.boost_pads[i].is_full_boost) for i in range(field_info.num_boosts))
         if len(self.boosts) != 34:
@@ -170,7 +172,7 @@ class VirxERLU(StandaloneBot):
 
         self.ready = True
 
-    def refresh_player_lists(self, packet):
+    def refresh_player_lists(self, packet: GameTickPacket):
         match_settings = self.get_match_settings()
         # Useful to keep separate from get_ready because humans can join/leave a match
         self.friends = tuple(car_object(i, packet) for i in range(packet.num_cars) if packet.game_cars[i].team is self.team and i != self.index)
@@ -183,24 +185,24 @@ class VirxERLU(StandaloneBot):
         except Exception:
             print(f"{self.name}: I appear to have been forcefully pushed into a match! How rude.")
 
-    def push(self, routine):
+    def push(self, routine: BaseRoutine):
         self.stack.append(routine)
 
     def pop(self):
         return self.stack.pop()
 
-    def line(self, start, end, color=None):
+    def line(self, start: Vector, end: Vector, color=None):
         if self.debugging and self.debug_lines:
             color = color if color is not None else self.renderer.grey()
             self.renderer.draw_line_3d(start.copy(), end.copy(), self.renderer.create_color(255, *color) if type(color) in {list, tuple} else color)
 
-    def polyline(self, vectors, color=None):
+    def polyline(self, vectors: list[Vector], color: Optional[list|Color]=None):
         if self.debugging and self.debug_lines:
             color = color if color is not None else self.renderer.grey()
             vectors = tuple(vector.copy() for vector in vectors)
             self.renderer.draw_polyline_3d(vectors, self.renderer.create_color(255, *color) if type(color) in {list, tuple} else color)
 
-    def sphere(self, location, radius, color=None):
+    def sphere(self, location: Vector, radius: float, color: Optional[list|Color]=None):
         if self.debugging and self.debug_lines:
             x = Vector(x=radius)
             y = Vector(y=radius)
@@ -293,7 +295,7 @@ class VirxERLU(StandaloneBot):
         stack_routine_name = '' if self.is_clear() else self.stack[0].__class__.__name__
         return stack_routine_name in {'Aerial', 'jump_shot', 'double_jump', 'ground_shot', 'short_shot'}
 
-    def get_output(self, packet):
+    def get_output(self, packet: GameTickPacket):
         try:
             # Reset controller
             self.controller.__init__(use_item=True)
@@ -482,11 +484,6 @@ class VirxERLU(StandaloneBot):
         }
         return tmcp_packet
 
-    @DeprecationWarning
-    def get_tmcp_action(self, tmcp_version):
-        # don't use this - overwrite create_tmcp_packet instead
-        return None
-
     def handle_tmcp_packet(self, packet):
         # https://github.com/RLBot/RLBot/wiki/Team-Match-Communication-Protocol
 
@@ -494,23 +491,28 @@ class VirxERLU(StandaloneBot):
             if friend.index == packet['index']:
                 friend.tmcp_action = packet['action']
 
-    def handle_match_comm(self, msg):
+    def handle_match_comm(self, msg: dict):
         pass
 
     def run(self):
         pass
 
-    def handle_quick_chat(self, index, team, quick_chat):
+    def handle_quick_chat(self, index: int, team: int, quick_chat: QuickChats):
         pass
 
     def init(self):
         pass
 
 
+class BaseRoutine:
+    def run(self, agent: VirxERLU):
+        raise NotImplementedError
+
+
 class car_object:
     # objects convert the gametickpacket in something a little friendlier to use
     # and are automatically updated by VirxERLU as the game runs
-    def __init__(self, index, packet=None, match_settings: MatchSettings=None):
+    def __init__(self, index: int, packet: GameTickPacket=None, match_settings: MatchSettings=None):
         self.location = Vector()
         self.orientation = Matrix3()
         self.velocity = Vector()
@@ -550,15 +552,15 @@ class car_object:
         self.team = -1
         self.hitbox = hitbox_object()
 
-    def local(self, value):
+    def local(self, value: Vector):
         # Generic localization
         return self.orientation.dot(value)
 
-    def global_(self, value):
+    def global_(self, value: Vector):
         # Converts a localized vector to a global vector
         return self.orientation.g_dot(value)
 
-    def local_velocity(self, velocity=None):
+    def local_velocity(self, velocity: Vector=None):
         # Returns the velocity of an item relative to the car
         # x is the velocity forwards (+) or backwards (-)
         # y is the velocity to the right (+) or left (-)
@@ -568,41 +570,24 @@ class car_object:
 
         return self.local(velocity)
 
-    def local_location(self, location):
+    def local_location(self, location: Vector):
         # Returns the location of an item relative to the car
         # x is how far the location is forwards (+) or backwards (-)
         # y is the velocity to the right (+) or left (-)
         # z is how far the location is upwards (+) or downwards (-)
         return self.local(location - self.location)
 
-    def global_location(self, location):
+    def global_location(self, location: Vector):
         # Converts a localized location to a global location
         return self.global_(location) + self.location
 
-    def local_flatten(self, value):
+    def local_flatten(self, value: Vector):
         # Flattens a vector relative to the car
         return self.global_(self.local(value).flatten())
 
-    def local_flatten_location(self, location):
+    def local_flatten_location(self, location: Vector):
         # Flattens a location relative to the car
         return self.global_location(self.local_location(location).flatten())
-
-    def get_raw(self, agent, force_on_ground=False):
-        return (
-            tuple(self.location),
-            tuple(self.velocity),
-            (tuple(self.forward), tuple(self.right), tuple(self.up)),
-            tuple(self.angular_velocity),
-            int(self.demolished),
-            int(self.airborne and not force_on_ground),
-            int(self.supersonic),
-            int(self.jumped),
-            int(self.doublejumped),
-            self.boost if agent.boost_amount != 'unlimited' else 255,
-            self.index,
-            tuple(self.hitbox),
-            tuple(self.hitbox.offset)
-        )
 
     def update(self, packet: GameTickPacket):
         car = packet.game_cars[self.index]
@@ -655,7 +640,7 @@ class car_object:
 
 
 class hitbox_object:
-    def __init__(self, length=0, width=0, height=0, offset=None):
+    def __init__(self, length: float=0, width: float=0, height: float=0, offset=None):
         self.length = length
         self.width = width
         self.height = height
@@ -664,7 +649,7 @@ class hitbox_object:
             offset = Vector()
         self.offset = offset
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int):
         return (self.length, self.width, self.height)[index]
 
     # len(self)
@@ -681,18 +666,18 @@ class hitbox_object:
         return f"hitbox_object(length={self.length}, width={self.width}, height={self.height})"
 
     # round(self)
-    def __round__(self, decimals=0) -> hitbox_object:
+    def __round__(self, decimals: int=0) -> hitbox_object:
         # Rounds all of the values
         return hitbox_object(*(round(euler_angle) for euler_angle in self))
 
 
 class hitbox_sphere:
-    def __init__(self, diameter=92.75):
+    def __init__(self, diameter: float=185.5):
         self.diameter = diameter
 
 
 class hitbox_cylinder:
-    def __init__(self, diameter=92.75, height=92.75):
+    def __init__(self, diameter: float=185.5, height: float=185.5):
         self.diameter = diameter
         self.height = height
 
@@ -704,7 +689,7 @@ class last_touch:
         self.time = -1
         self.car = None
 
-    def update(self, packet):
+    def update(self, packet: GameTickPacket):
         touch = packet.game_ball.latest_touch
         self.location = Vector.from_vector(touch.hit_location)
         self.normal = Vector.from_vector(touch.hit_normal)
@@ -736,12 +721,6 @@ class ball_object:
         self.last_touch = last_touch()
         self.shape = ball_shape()
 
-    def get_raw(self):
-        return (
-            tuple(self.location),
-            tuple(self.velocity)
-        )
-
     def update(self, packet: GameTickPacket):
         ball = packet.game_ball
         self.location = Vector.from_vector(ball.physics.location)
@@ -751,19 +730,19 @@ class ball_object:
 
 
 class boost_object:
-    def __init__(self, index, location, large):
+    def __init__(self, index: int, location: Vector, large: bool):
         self.index = index
         self.location = Vector.from_vector(location)
         self.active = True
         self.large = large
 
-    def update(self, packet):
+    def update(self, packet: GameTickPacket):
         self.active = packet.game_boosts[self.index].is_active
 
 
 class goal_object:
     # This is a simple object that creates/holds goalpost locations for a given team (for soccer on standard maps only)
-    def __init__(self, team):
+    def __init__(self, team: int):
         team = 1 if team == 1 else -1
         self.location = Vector(0, team * 5120, 321.3875)  # center of goal line
         # Posts are closer to x=893, but this allows the bot to be a little more accurate
@@ -784,7 +763,7 @@ class game_object:
         self.foe_score = 0
         self.gravity = Vector()
 
-    def update(self, team, packet: GameTickPacket):
+    def update(self, team: int, packet: GameTickPacket):
         game = packet.game_info
         self.time = game.seconds_elapsed
         self.time_remaining = game.game_time_remaining
@@ -808,7 +787,7 @@ class Matrix3:
     # ie: local_ball_location = Matrix3.dot(ball.location - car.location)
     # to convert from local coordinates back to global coordinates:
     # global_ball_location = Matrix3.g_dot(local_ball_location) + car_location
-    def __init__(self, pitch=0, yaw=0, roll=0, simple=False):
+    def __init__(self, pitch: float=0, yaw: float=0, roll: float=0, simple: bool=False):
         self.pitch = pitch
         self.yaw = yaw
         self.roll = roll
@@ -845,19 +824,14 @@ class Matrix3:
     def up(self):
         return self.rotation[2]
 
-    @DeprecationWarning
-    @property
-    def data(self):
-        return self.rotation
-
-    def __getitem__(self, key):
+    def __getitem__(self, key: int):
         return self.rotation[key]
 
     def __str__(self):
         return f"[{self.forward}\n {self.right}\n {self.up}]"
 
     @staticmethod
-    def from_rotator(rotator) -> Matrix3:
+    def from_rotator(rotator: Rotator) -> Matrix3:
         return Matrix3(rotator.pitch, rotator.yaw, rotator.roll)
 
     @staticmethod
@@ -898,14 +872,14 @@ class Matrix3:
 # Arithmetic with 1D and 2D lists/tuples aren't supported - just set the remaining values to 0 manually
 # With this new setup, Vector is much faster because it's just a wrapper for numpy
 class Vector:
-    def __init__(self, x: float = 0, y: float = 0, z: float = 0, np_arr=None):
+    def __init__(self, x: float=0, y: float=0, z: float=0, np_arr: Optional[np.ndarray]=None):
         # this is a private property - this is so all other things treat this class like a list, and so should you!
         self._np = np.array([x, y, z]) if np_arr is None else np_arr
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int):
         return self._np[index].item()
 
-    def __setitem__(self, index, value):
+    def __setitem__(self, index: int, value: float):
         self._np[index] = value
 
     @property
@@ -913,7 +887,7 @@ class Vector:
         return self._np[0].item()
 
     @x.setter
-    def x(self, value):
+    def x(self, value: float):
         self._np[0] = value
 
     @property
@@ -921,7 +895,7 @@ class Vector:
         return self._np[1].item()
 
     @y.setter
-    def y(self, value):
+    def y(self, value: float):
         self._np[1] = value
 
     @property
@@ -929,11 +903,11 @@ class Vector:
         return self._np[2].item()
 
     @z.setter
-    def z(self, value):
+    def z(self, value: float):
         self._np[2] = value
 
     # self == value
-    def __eq__(self, value):
+    def __eq__(self, value: float|Vector):
         if isinstance(value, float) or isinstance(value, int):
             return self.magnitude() == value
 
@@ -991,12 +965,12 @@ class Vector:
         return self * (1 / value)
 
     # round(self)
-    def __round__(self, decimals=0) -> Vector:
+    def __round__(self, decimals: int=0) -> Vector:
         # Rounds all of the values
         return Vector(np_arr=np.around(self._np, decimals=decimals))
 
     @staticmethod
-    def from_vector(vec) -> Vector:
+    def from_vector(vec: Vector3) -> Vector:
         return Vector(vec.x, vec.y, vec.z)
 
     def magnitude(self) -> float:
@@ -1007,13 +981,13 @@ class Vector:
         # Returns the length of the vector in a numpy float 64
         return np.linalg.norm(self._np)
 
-    def dot(self, value: Vector) -> float:
+    def dot(self, value: Vector|np.ndarray) -> float:
         # Returns the dot product of two vectors
         if hasattr(value, "_np"):
             value = value._np
         return self._np.dot(value).item()
 
-    def cross(self, value: Vector) -> Vector:
+    def cross(self, value: Vector|np.ndarray) -> Vector:
         # Returns the cross product of two vectors
         if hasattr(value, "_np"):
             value = value._np
@@ -1023,7 +997,7 @@ class Vector:
         # Returns a copy of the vector
         return Vector(*self._np)
 
-    def normalize(self, return_magnitude=False) -> List[Vector, float] or Vector:
+    def normalize(self, return_magnitude: bool=False) -> List[Vector, float] or Vector:
         # normalize() returns a Vector that shares the same direction but has a length of 1
         # normalize(True) can also be used if you'd like the length of this Vector (used for optimization)
         magnitude = self._magnitude()
@@ -1087,7 +1061,7 @@ class Vector:
 
         return s
 
-    def dist(self, value: Vector) -> float:
+    def dist(self, value: Vector|np.ndarray) -> float:
         # Distance between 2 vectors
         if hasattr(value, "_np"):
             value = value._np
@@ -1101,7 +1075,7 @@ class Vector:
         # Caps all values in a Vector between 'low' and 'high'
         return Vector(*(max(min(item, high), low) for item in self._np))
 
-    def midpoint(self, value: Vector) -> Vector:
+    def midpoint(self, value: Vector|np.ndarray) -> Vector:
         # Midpoint of the 2 vectors
         if hasattr(value, "_np"):
             value = value._np

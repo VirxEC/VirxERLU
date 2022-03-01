@@ -1,5 +1,7 @@
+from rlbot.utils.structures.quick_chats import QuickChats
+
 from util import routines, tools, utils
-from util.agent import Vector, VirxERLU, run_bot
+from util.agent import Vector, VirxERLU
 
 
 class Bot(VirxERLU):
@@ -149,25 +151,21 @@ class Bot(VirxERLU):
             # Clear the stack
             self.clear()
 
-    def handle_tmcp_packet(self, packet):
+    def handle_tmcp_packet(self, packet: dict):
         super().handle_tmcp_packet(packet)
 
         self.print(packet)
 
-    def handle_match_comm(self, msg):
+    def handle_match_comm(self, msg: dict):
         # NOTE This is for handling any incoming match communications
 
         # All match comms are Python objects
         if msg.get('team') is self.team:
             self.print(msg)
 
-    def handle_quick_chat(self, index, team, quick_chat):
+    def handle_quick_chat(self, index: int, team: int, quick_chat: QuickChats):
         # NOTE This is for handling any incoming quick chats
 
         # See https://github.com/RLBot/RLBot/blob/master/src/main/flatbuffers/rlbot.fbs#L376 for a list of all quick chats
         if self.team is team:
             self.print(quick_chat)
-
-
-if __name__ == "__main__":
-    run_bot(Bot)
