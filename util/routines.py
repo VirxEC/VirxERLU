@@ -267,6 +267,85 @@ class GoToBoost(BaseRoutine):
 goto_boost = GoToBoost  # legacy
 
 
+class retreat:
+    def __init__(self):
+        self.goto = goto(Vector(), brake=True)
+
+    def run(self, agent: VirxERLU):
+        ball = self.get_ball_loc(agent, render=True)
+        target = self.get_target(agent, ball=ball)
+
+        # if shadow().is_viable(agent, ignore_distance=True):
+        #     agent.pop()
+        #     agent.push(shadow())
+        #     return
+
+        self_to_target = agent.me.location.flat_dist(target)
+
+        if self_to_target < agent.me.hitbox.width:
+            agent.pop()
+            agent.push(Brake())
+            return
+
+        self.goto.target = target
+        self.goto.run(agent)
+
+    def is_viable(self, agent):
+        return agent.me.location.flat_dist(self.get_target(agent)) > 320 #and not shadow().is_viable(agent, ignore_distance=True)
+
+    def get_ball_loc(self, agent: VirxERLU, render=False):
+        ball_slice = agent.ball.location
+
+        ball = Vector(ball_slice.x, ball_slice.y)
+        if render: agent.sphere(ball + Vector(z=agent.ball_radius), agent.ball_radius, color=agent.renderer.black())
+        ball.y *= utils.side(agent.team)
+
+        if ball.y < agent.ball.location.y * utils.side(agent.team):
+            ball = Vector(agent.ball.location.x, agent.ball.location.y * utils.side(agent.team) + 640)
+
+        return ball
+
+    @staticmethod
+    def friend_near_target(agent: VirxERLU, target):
+        for car in agent.friends:
+            if car.location.dist(target) < 400:
+                return True
+        return False
+
+    def get_target(self, agent: VirxERLU, ball=None):
+        target = None
+        if ball is None:
+            ball = self.get_ball_loc(agent)
+        self_team = utils.side(agent.team)
+
+        horizontal_offset = 150
+        outside_goal_offset = -125
+        inside_goal_offset = 150
+
+        if ball.y < -640:
+            target = agent.friend_goal.location.copy()
+        elif ball.x * self_team < agent.friend_goal.right_post.x * self_team:
+            target = agent.friend_goal.right_post.copy()
+
+            while self.friend_near_target(agent, target):
+                target.x = (target.x * self_team + horizontal_offset * self_team) * self_team
+        elif ball.x * self_team > agent.friend_goal.left_post.x * self_team:
+            target = agent.friend_goal.left_post.copy()
+
+            while self.friend_near_target(agent, target):
+                target.x = (target.x * self_team - horizontal_offset * self_team) * self_team
+        else:
+            target = agent.friend_goal.location.copy()
+            target.x = ball.x
+
+            while self.friend_near_target(agent, target):
+                target.x = (target.x * self_team - horizontal_offset * utils.sign(ball.x) * self_team) * self_team
+
+        target.y += (inside_goal_offset if abs(target.x) < 800 else outside_goal_offset) * utils.side(agent.team)
+
+        return target.flatten()
+
+
 class GenericKickoff(BaseRoutine):
     def __init__(self):
         self.start_time = -1

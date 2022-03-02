@@ -115,21 +115,21 @@ class Bot(VirxERLU):
         # TODO this setup is far from ideal - a custom shadow/retreat routine is probably best for the bot...
         # Make sure to put custom routines in a separate file from VirxERLU routines, so you can easily update VirxERLU to newer versions.
         # If the stack is still clear
-        # if self.is_clear():
-        #     # If ball is in our half
-        #     if self.ball.location.y * utils.side(self.team) > 640:
-        #         retreat_routine = routines.retreat()
-        #         # Check if the retreat routine is viable
-        #         if retreat_routine.is_viable(self):
-        #             # Retreat back to the net
-        #             self.push(retreat_routine)
-        #     # If the ball isn't in our half
-        #     else:
-        #         shadow_routine = routines.shadow()
-        #         # Check if the shadow routine is viable
-        #         if shadow_routine.is_viable(self):
-        #             # Shadow
-        #             self.push(shadow_routine)
+        if self.is_clear():
+            # If ball is in our half
+            if self.ball.location.y * utils.side(self.team) > 640:
+                retreat_routine = routines.retreat()
+                # Check if the retreat routine is viable
+                if retreat_routine.is_viable(self):
+                    # Retreat back to the net
+                    self.push(retreat_routine)
+            # If the ball isn't in our half
+            # else:
+            #     shadow_routine = routines.shadow()
+            #     # Check if the shadow routine is viable
+            #     if shadow_routine.is_viable(self):
+            #         # Shadow
+            #         self.push(shadow_routine)
 
         # If we get here, then we are doing our kickoff, nor can we shoot, nor can we retreat or shadow - so let's just wait!
 

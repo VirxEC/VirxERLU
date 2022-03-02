@@ -120,6 +120,7 @@ class VirxERLU(BaseAgent):
         self.friends: list[car_object] = ()
         self.foes: list[car_object] = ()
         self.me = car_object(self.index)
+
         self.ball_to_goal = -1
 
         self.ball = ball_object()
@@ -198,6 +199,17 @@ class VirxERLU(BaseAgent):
             self.stack[-1].pre_pop()
         return self.stack.pop()
 
+    def clear(self):
+        for r in self.stack:
+            if hasattr(r, "pre_pop"):
+                r.pre_pop()
+
+        self.shooting = False
+        self.stack = []
+
+    def is_clear(self) -> bool:
+        return len(self.stack) < 1
+
     def get_color_from(self, color: Optional[list|tuple|Color]) -> Color:
         if color is None:
             return self.renderer.grey()
@@ -260,16 +272,6 @@ class VirxERLU(BaseAgent):
 
     def dbg_2d(self, item):
         self.debug[1].append(str(item))
-
-    def clear(self):
-        for r in self.stack:
-            r.pre_pop()
-
-        self.shooting = False
-        self.stack = []
-
-    def is_clear(self) -> bool:
-        return len(self.stack) < 1
 
     def preprocess(self, packet: GameTickPacket):
         if packet.num_cars != len(self.friends)+len(self.foes)+1 or self.odd_tick == 0:
