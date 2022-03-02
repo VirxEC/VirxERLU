@@ -18,6 +18,7 @@ from rlbot.utils.structures.game_data_struct import (GameTickPacket, Rotator,
 from rlbot.utils.structures.quick_chats import QuickChats
 
 # If you're putting your bot in the botpack, or submitting to a tournament, make this True!
+# Also consider setting "requires_tkinter" in Bot.cfg to False.
 TOURNAMENT_MODE = False
 
 # Make False to enable hot reloading, at the cost of the GUI
@@ -115,6 +116,7 @@ class VirxERLU(BaseAgent):
         self.game_mode = game_mode[match_settings.GameMode()]
         self.ball_radius = 92.75
 
+        self.all: list[car_object] = ()
         self.friends: list[car_object] = ()
         self.foes: list[car_object] = ()
         self.me = car_object(self.index)
@@ -142,6 +144,7 @@ class VirxERLU(BaseAgent):
         self.delta_time = 1 / 120
         self.last_sent_tmcp_packet = None
         # self.sent_tmcp_packet_times = {}
+        self.tick_times: list[float] = []
 
         self.future_ball_location_slice = 180
         self.balL_prediction_struct = None
@@ -174,15 +177,21 @@ class VirxERLU(BaseAgent):
 
         self.ready = True
 
+    def update_cars_from_all(self):
+        self.friends = tuple(car for car in self.all if car.team == self.team and car.index != self.index)
+        self.foes = tuple(car for car in self.all if car.team != self.team)
+        self.me = self.all[self.index]
+        self.true_name = self.me.true_name
+
     def refresh_player_lists(self, packet: GameTickPacket):
         # Useful to keep separate from get_ready because humans can join/leave a match
-        self.friends = tuple(car_object(i, packet) for i in range(packet.num_cars) if packet.game_cars[i].team is self.team and i != self.index)
-        self.foes = tuple(car_object(i, packet) for i in range(packet.num_cars) if packet.game_cars[i].team != self.team)
-        self.me = car_object(self.index, packet)
-        self.true_name = self.me.true_name
+        self.all = tuple(car_object(i, packet) for i in range(packet.num_cars))
+        self.update_cars_from_all()
 
     def push(self, routine: BaseRoutine):
         self.stack.append(routine)
+        if hasattr(self.stack[-1], "on_push"):
+            self.stack[-1].on_push()
 
     def pop(self) -> BaseRoutine:
         if hasattr(self.stack[-1], "pre_pop"):
@@ -266,12 +275,11 @@ class VirxERLU(BaseAgent):
         if packet.num_cars != len(self.friends)+len(self.foes)+1 or self.odd_tick == 0:
             self.refresh_player_lists(packet)
 
-        set(map(lambda car: car.update(packet), self.friends))
-        set(map(lambda car: car.update(packet), self.foes))
+        rlru.tick(packet)
         set(map(lambda pad: pad.update(packet), self.boosts))
-
+        set(map(lambda car: car.update(packet), self.all))
+        self.update_cars_from_all()
         self.ball.update(packet)
-        self.me.update(packet)
         self.game.update(self.team, packet)
 
         self.delta_time = self.game.time - self.time
@@ -320,6 +328,8 @@ class VirxERLU(BaseAgent):
 
     def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
         try:
+            start = time_ns()
+
             # Reset controller
             self.controller.__init__(use_item=True)
 
@@ -373,6 +383,10 @@ class VirxERLU(BaseAgent):
 
                 if self.debugging:
                     if self.debug_3d_bool:
+                        if len(self.tick_times) > 0:
+                            avg_mspt = round(sum(self.tick_times) / len(self.tick_times), 3)
+                            self.dbg_3d(f"Avg. ms/t: {avg_mspt}")
+
                         self.dbg_3d(f"# of targets: {rlru.get_targets_length()}")
 
                         if self.debug_stack_bool:
@@ -425,6 +439,11 @@ class VirxERLU(BaseAgent):
                         self.polyline(tuple(Vector(ball_slice.physics.location.x, ball_slice.physics.location.y, ball_slice.physics.location.z) for ball_slice in self.ball_prediction_struct.slices[::self.debug_ball_path_precision]))
 
                 self.debug = [[], []]
+
+            end = time_ns()
+            self.tick_times.append(round((end - start) / 1_000_000, 3))
+            while len(self.tick_times) > 120:
+                del self.tick_times[0]
 
             return SimpleControllerState() if self.disable_driving else self.controller
         except Exception:
@@ -533,7 +552,10 @@ class BaseRoutine:
     def run(self, agent: VirxERLU):
         raise NotImplementedError
 
-    def pre_pop(self, agent: VirxERLU):
+    def on_push(self):
+        pass
+
+    def pre_pop(self):
         pass
 
 

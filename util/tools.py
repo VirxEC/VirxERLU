@@ -1,14 +1,14 @@
 from typing import Optional, Tuple
+
 import virx_erlu_rlib as rlru
+
 from util.agent import VirxERLU
-
 # from util.routines import Aerial, double_jump, ground_shot, jump_shot
-from util.routines import ground_shot
-from util.utils import Vector, cap
-
+from util.routines import GroundShot
+from util.utils import Vector
 
 SHOT_SWITCH = {
-    rlru.ShotType.GROUND: ground_shot,
+    rlru.ShotType.GROUND: GroundShot,
     # ShotType.JUMP: jump_shot,
     # ShotType.DOUBLE_JUMP: double_jump
 }
@@ -62,14 +62,13 @@ def find_shot(agent: VirxERLU, target: Tuple[Vector, Vector], cap_: int=6, can_a
 
     # Construct the target
     options = rlru.TargetOptions(*slices)
-    target = rlru.new_target(tuple(target[0]), tuple(target[1]), agent.me.index, options)
+    target_id = rlru.new_target(tuple(target[0]), tuple(target[1]), agent.me.index, options)
 
     # Search for the shot
-    shot = rlru.get_shot_with_target(target, may_ground_shot=can_ground, only=True)
+    shot = rlru.get_shot_with_target(target_id, may_ground_shot=can_ground, only=True)
 
     if shot.found:
-        rlru.confirm_target(target)
-        return SHOT_SWITCH[shot.shot_type](shot.time, target)
+        return SHOT_SWITCH[shot.shot_type](shot.time, target_id)
 
 
 # def find_any_shot(agent, cap_=6, can_aerial=True, can_double_jump=True, can_jump=True, can_ground=True):
@@ -156,4 +155,4 @@ def get_slices(agent: VirxERLU, cap_: int) -> Optional[Tuple[int, int]]:
     if end_slice <= start_slice:
         return
 
-    return end_slice, start_slice
+    return start_slice, end_slice

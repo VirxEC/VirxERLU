@@ -40,7 +40,7 @@ def defaultPD(agent: VirxERLU, local_target: Vector, upside_down: bool=False, up
     )
 
     # Once we have the angles we need to rotate, we feed them into PD loops to determing the controller inputs
-    agent.controller.steer = cap(3.4 * target_angles[0] + 0.235 * agent.me.angular_velocity.z, -1, 1)  # Use RLU PID to steer towards target
+    agent.controller.steer = cap(3.4 * target_angles[1] + 0.235 * agent.me.angular_velocity.z, -1, 1)  # Use RLU PID to steer towards target
     agent.controller.pitch = steerPD(target_angles[0], agent.me.angular_velocity.y/4)
     agent.controller.yaw = steerPD(target_angles[1], -agent.me.angular_velocity.z/4)
     agent.controller.roll = steerPD(target_angles[2], agent.me.angular_velocity.x/4)
@@ -379,7 +379,9 @@ def vertex_quadratic_solve_for_x_min_non_neg(a: float, h: float, k: float, y: fl
 
 
 def get_landing_time(fall_distance: float, falling_time_until_terminal_velocity: float, falling_distance_until_terminal_velocity: float, terminal_velocity: float, k: float, h: float, g: float) -> float:
-    return vertex_quadratic_solve_for_x_min_non_neg(g, h, k, fall_distance) if (fall_distance * sign(-g) <= falling_distance_until_terminal_velocity * sign(-g)) else falling_time_until_terminal_velocity + ((fall_distance - falling_distance_until_terminal_velocity) / terminal_velocity)
+    if fall_distance * sign(-g) <= falling_distance_until_terminal_velocity * sign(-g):
+        return vertex_quadratic_solve_for_x_min_non_neg(g, h, k, fall_distance)
+    return falling_time_until_terminal_velocity + ((fall_distance - falling_distance_until_terminal_velocity) / terminal_velocity)
 
 
 def find_landing_plane(l: Vector, v: Vector, g: float) -> int:
@@ -417,7 +419,7 @@ def find_landing_plane(l: Vector, v: Vector, g: float) -> int:
                 times[5] = vertex_quadratic_solve_for_x_min_non_neg(g, h, k, climb_dist)
 
         # this is necessary because after we reach our terminal velocity, the equation becomes linear (distance_remaining / terminal_velocity)
-        terminal_velocity = (2300 - v.flatten().magnitude()) * sign(g)
+        terminal_velocity = math.copysign(2300 - v.flatten().magnitude(), g)
         falling_time_until_terminal_velocity = (terminal_velocity - v.z) / g
         falling_distance_until_terminal_velocity = v.z * falling_time_until_terminal_velocity + -g * (falling_time_until_terminal_velocity * falling_time_until_terminal_velocity) / 2.
 

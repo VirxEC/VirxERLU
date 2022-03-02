@@ -27,7 +27,7 @@ class Bot(VirxERLU):
             if self.is_clear():
                 # Push a generic kickoff to the stack
                 # TODO make kickoff routines for each of the 5 kickoffs positions
-                self.push(routines.generic_kickoff())
+                self.push(routines.GenericKickoff())
 
             # we don't want to do anything else during our kickoff
             return
@@ -53,9 +53,10 @@ class Bot(VirxERLU):
 
             # TODO we might miss the net, even when using a target - make a pair of targets that are small than the goal so we have a better chance of scoring!
             # If the ball is on the enemy's side of the field, or slightly on our side
-            if self.ball.location.y * utils.side(self.team) < 640:
-                # Find a shot, on target - double_jump, jump_shot, and ground_shot are automatically disabled if we're airborne
-                shot = tools.find_shot(self, self.foe_goal_shot)
+            # if self.ball.location.y * utils.side(self.team) < 640:
+            #     # Find a shot, on target - double_jump, jump_shot, and ground_shot are automatically disabled if we're airborne
+            #     shot = tools.find_shot(self, self.foe_goal_shot)
+            shot = tools.find_shot(self, self.foe_goal_shot)
 
             # TODO Using an anti-target here could be cool - do to this, pass in a target tuple that's (right_target, left_target) (instead of (left, right)) into tools.find_shot (NOT tools.find_any_shot)
             # TODO When possible, we might want to take a little bit more time to shot the ball anywhere in the opponent's end - this target should probably be REALLY LONG AND HIGH!
@@ -94,7 +95,7 @@ class Bot(VirxERLU):
         # If the stack if clear and we're in the air
         if self.is_clear() and self.me.airborne:
             # Recover - This routine supports floor, wall, and ceiling recoveries, as well as recovering towards a target
-            self.push(routines.recovery())
+            self.push(routines.Recovery())
 
             # we've made our decision and we don't want to run anything else
             return
@@ -114,21 +115,21 @@ class Bot(VirxERLU):
         # TODO this setup is far from ideal - a custom shadow/retreat routine is probably best for the bot...
         # Make sure to put custom routines in a separate file from VirxERLU routines, so you can easily update VirxERLU to newer versions.
         # If the stack is still clear
-        if self.is_clear():
-            # If ball is in our half
-            if self.ball.location.y * utils.side(self.team) > 640:
-                retreat_routine = routines.retreat()
-                # Check if the retreat routine is viable
-                if retreat_routine.is_viable(self):
-                    # Retreat back to the net
-                    self.push(retreat_routine)
-            # If the ball isn't in our half
-            else:
-                shadow_routine = routines.shadow()
-                # Check if the shadow routine is viable
-                if shadow_routine.is_viable(self):
-                    # Shadow
-                    self.push(shadow_routine)
+        # if self.is_clear():
+        #     # If ball is in our half
+        #     if self.ball.location.y * utils.side(self.team) > 640:
+        #         retreat_routine = routines.retreat()
+        #         # Check if the retreat routine is viable
+        #         if retreat_routine.is_viable(self):
+        #             # Retreat back to the net
+        #             self.push(retreat_routine)
+        #     # If the ball isn't in our half
+        #     else:
+        #         shadow_routine = routines.shadow()
+        #         # Check if the shadow routine is viable
+        #         if shadow_routine.is_viable(self):
+        #             # Shadow
+        #             self.push(shadow_routine)
 
         # If we get here, then we are doing our kickoff, nor can we shoot, nor can we retreat or shadow - so let's just wait!
 
@@ -141,7 +142,7 @@ class Bot(VirxERLU):
             # Get the closest boost
             closest_boost = min(boosts, key=lambda boost: boost.location.dist(self.me.location))
             # Goto the nearest boost
-            self.push(routines.goto_boost(closest_boost))
+            self.push(routines.GoToBoost(closest_boost))
 
     def demolished(self):
         # NOTE This method is ran every tick that your bot it demolished
@@ -158,14 +159,14 @@ class Bot(VirxERLU):
 
     def handle_match_comm(self, msg: dict):
         # NOTE This is for handling any incoming match communications
-
         # All match comms are Python objects
-        if msg.get('team') is self.team:
-            self.print(msg)
+        self.print(f"Got TMCP message from {self.all[msg['index']].name}!")
 
     def handle_quick_chat(self, index: int, team: int, quick_chat: QuickChats):
         # NOTE This is for handling any incoming quick chats
 
         # See https://github.com/RLBot/RLBot/blob/master/src/main/flatbuffers/rlbot.fbs#L376 for a list of all quick chats
-        if self.team is team:
-            self.print(quick_chat)
+        if self.team is team and self.index != index:
+            # Check for "I got it!"
+            if quick_chat == QuickChats.Information_IGotIt:
+                self.print(f"Ignoring 'I got it!' from {self.all[index].name} :)")
