@@ -22,7 +22,7 @@ class ground_shot(BaseRoutine):
 
         agent.point(future_ball_location, self.renderer.purple())
 
-        T = self.shot_time - self.time
+        T = self.intercept_time - agent.time
 
         try:
             shot_info = rlru.get_data_for_shot_with_target(self.shot)
@@ -36,16 +36,16 @@ class ground_shot(BaseRoutine):
             return
 
         if len(shot_info.path_samples) > 2:
-            self.renderer.draw_polyline_3d(tuple((sample[0], sample[1], 30) for sample in shot_info.path_samples), self.renderer.lime())
+            agent.polyline(tuple((sample[0], sample[1], 30) for sample in shot_info.path_samples), agent.renderer.lime())
         else:
-            self.renderer.draw_line_3d(tuple(self.me.location), tuple(shot_info.final_target), self.renderer.lime())
+            agent.line(agent.me.location, shot_info.final_target, agent.renderer.lime())
 
         final_target = Vector(*shot_info.final_target)
-        self.draw_point(final_target, self.renderer.red())
+        agent.point(final_target, self.renderer.red())
         distance_remaining = shot_info.distance_remaining
 
         speed_required = min(distance_remaining / T, 2300)
-        local_final_target = self.me.local_location(final_target.flatten())
+        local_final_target = agent.me.local_location(final_target.flatten())
 
         utils.defaultDrive(agent, speed_required, local_final_target)
 

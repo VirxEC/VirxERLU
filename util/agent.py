@@ -189,27 +189,38 @@ class VirxERLU(BaseAgent):
             self.stack[-1].pre_pop()
         return self.stack.pop()
 
-    def line(self, start: Vector, end: Vector, color=None):
+    def get_color_from(self, color: Optional[list|tuple|Color]) -> Color:
+        if color is None:
+            return self.renderer.grey()
+        elif type(color) in {list, tuple}:
+            return self.renderer.create_color(255, *color)
+
+        return color
+
+    def line(self, start: Vector, end: Vector, color: Optional[list|tuple|Color]=None):
         if self.debugging and self.debug_lines:
-            color = color if color is not None else self.renderer.grey()
-            self.renderer.draw_line_3d(start.to_vector3(), end.to_vector3(), self.renderer.create_color(255, *color) if type(color) in {list, tuple} else color)
+            self.renderer.draw_line_3d(
+                start.to_vector3(),
+                end.to_vector3(),
+                self.get_color_from(color)
+            )
 
     def polyline(self, vectors: list[Vector], color: Optional[list|Color]=None):
-        if self.debugging and self.debug_lines:
-            color = color if color is not None else self.renderer.grey()
-            vectors = tuple(vector.to_vector3() for vector in vectors)
-            self.renderer.draw_polyline_3d(vectors, self.renderer.create_color(255, *color) if type(color) in {list, tuple} else color)
+        if self.debugging and self.debug_lines: 
+            self.renderer.draw_polyline_3d(
+                tuple(vector.to_vector3() for vector in vectors),
+                self.get_color_from(color)
+            )
 
-    def draw_point(self, point: Vector, color: Optional[list|Color]=None):
+    def point(self, point: Vector, color: Optional[list|Color]=None):
         if self.debugging and self.debug_lines:
-            color = color if color is not None else self.renderer.grey()
             self.renderer.draw_line_3d(
                 (point - Vector(z=100)).to_vector3(),
                 (point + Vector(z=100)).to_vector3(),
-                self.renderer.create_color(255, *color) if type(color) in {list, tuple} else color,
+                self.get_color_from(color),
             )
 
-    def sphere(self, location: Vector, radius: float, color: Optional[list|Color]=None):
+    def sphere(self, location: Vector, radius: float, color: Optional[list|tuple|Color]=None):
         if self.debugging and self.debug_lines:
             x = Vector(x=radius)
             y = Vector(y=radius)
@@ -220,6 +231,8 @@ class VirxERLU(BaseAgent):
             d2 = Vector(-diag, diag, diag)
             d3 = Vector(-diag, -diag, diag)
             d4 = Vector(-diag, diag, -diag)
+
+            color = self.get_color_from(color)
 
             self.line(location - x, location + x, color)
             self.line(location - y, location + y, color)
