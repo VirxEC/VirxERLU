@@ -10,6 +10,7 @@ from traceback import print_exc
 from typing import Optional, Tuple
 
 import numpy as np
+import virx_erlu_rlib as rlru
 from rlbot.agents.base_agent import BaseAgent, SimpleControllerState
 from rlbot.utils.rendering.rendering_manager import Color
 from rlbot.utils.structures.game_data_struct import (GameTickPacket, Rotator,
@@ -49,6 +50,8 @@ class VirxERLU(BaseAgent):
 
     def initialize_agent(self):
         self.startup_time = time_ns()
+
+        rlru.load_soccar()
 
         T = datetime.now()
         T = T.strftime("%Y-%m-%d %H;%M")
@@ -189,13 +192,22 @@ class VirxERLU(BaseAgent):
     def line(self, start: Vector, end: Vector, color=None):
         if self.debugging and self.debug_lines:
             color = color if color is not None else self.renderer.grey()
-            self.renderer.draw_line_3d(start.copy(), end.copy(), self.renderer.create_color(255, *color) if type(color) in {list, tuple} else color)
+            self.renderer.draw_line_3d(start.to_vector3(), end.to_vector3(), self.renderer.create_color(255, *color) if type(color) in {list, tuple} else color)
 
     def polyline(self, vectors: list[Vector], color: Optional[list|Color]=None):
         if self.debugging and self.debug_lines:
             color = color if color is not None else self.renderer.grey()
-            vectors = tuple(vector.copy() for vector in vectors)
+            vectors = tuple(vector.to_vector3() for vector in vectors)
             self.renderer.draw_polyline_3d(vectors, self.renderer.create_color(255, *color) if type(color) in {list, tuple} else color)
+
+    def draw_point(self, point: Vector, color: Optional[list|Color]=None):
+        if self.debugging and self.debug_lines:
+            color = color if color is not None else self.renderer.grey()
+            self.renderer.draw_line_3d(
+                (point - Vector(z=100)).to_vector3(),
+                (point + Vector(z=100)).to_vector3(),
+                self.renderer.create_color(255, *color) if type(color) in {list, tuple} else color,
+            )
 
     def sphere(self, location: Vector, radius: float, color: Optional[list|Color]=None):
         if self.debugging and self.debug_lines:
@@ -228,6 +240,9 @@ class VirxERLU(BaseAgent):
         self.debug[1].append(str(item))
 
     def clear(self):
+        for r in self.stack:
+            r.pre_pop()
+
         self.shooting = False
         self.stack = []
 
@@ -345,6 +360,8 @@ class VirxERLU(BaseAgent):
 
                 if self.debugging:
                     if self.debug_3d_bool:
+                        self.dbg_3d(f"# of targets: {rlru.get_targets_length()}")
+
                         if self.debug_stack_bool:
                             self.debug[0] = itertools.chain(self.debug[0], ("STACK:",), (item.__class__.__name__ for item in reversed(self.stack)))
 
@@ -965,6 +982,9 @@ class Vector:
     @staticmethod
     def from_vector(vec: Vector3) -> Vector:
         return Vector(vec.x, vec.y, vec.z)
+
+    def to_vector3(self) -> Vector3:
+        return Vector3(self.x, self.y, self.z)
 
     def magnitude(self) -> float:
         # Returns the length of the vector

@@ -60,9 +60,9 @@ class Bot(VirxERLU):
             # TODO Using an anti-target here could be cool - do to this, pass in a target tuple that's (right_target, left_target) (instead of (left, right)) into tools.find_shot (NOT tools.find_any_shot)
             # TODO When possible, we might want to take a little bit more time to shot the ball anywhere in the opponent's end - this target should probably be REALLY LONG AND HIGH!
             # If we're behind the ball and we couldn't find a shot on target
-            if shot is None and self.ball.location.y * utils.side(self.team) < self.me.location.y * utils.side(self.team):
-                # Find a shot, but without a target - double_jump, jump_shot, and ground_shot are automatically disabled if we're airborne
-                shot = tools.find_any_shot(self)
+            # if shot is None and self.ball.location.y * utils.side(self.team) < self.me.location.y * utils.side(self.team):
+            #     # Find a shot, but without a target - double_jump, jump_shot, and ground_shot are automatically disabled if we're airborne
+            #     shot = tools.find_any_shot(self)
 
             # If we found a shot
             if shot is not None:
