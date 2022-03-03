@@ -118,11 +118,11 @@ class Bot(VirxERLU):
         if self.is_clear():
             # If ball is in our half
             if self.ball.location.y * utils.side(self.team) > 640:
-                retreat_routine = routines.retreat()
+                retreat = routines.Retreat()
                 # Check if the retreat routine is viable
-                if retreat_routine.is_viable(self):
+                if retreat.is_viable(self):
                     # Retreat back to the net
-                    self.push(retreat_routine)
+                    self.push(retreat)
             # If the ball isn't in our half
             # else:
             #     shadow_routine = routines.shadow()

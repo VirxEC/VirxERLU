@@ -267,7 +267,7 @@ class GoToBoost(BaseRoutine):
 goto_boost = GoToBoost  # legacy
 
 
-class retreat:
+class Retreat(BaseRoutine):
     def __init__(self):
         self.goto = goto(Vector(), brake=True)
 
@@ -344,6 +344,7 @@ class retreat:
         target.y += (inside_goal_offset if abs(target.x) < 800 else outside_goal_offset) * utils.side(agent.team)
 
         return target.flatten()
+retreat = Retreat # legacy
 
 
 class GenericKickoff(BaseRoutine):
