@@ -7,7 +7,7 @@ from typing import Optional
 import virx_erlu_rlib as rlru
 
 from util import utils
-from util.agent import BaseRoutine, Vector, VirxERLU, boost_object, rlru
+from util.agent import BaseRoutine, Vector, VirxERLU, boost_object
 
 
 class GroundShot(BaseRoutine):
@@ -120,7 +120,7 @@ def brake_handler(agent: VirxERLU) -> bool:
     # current forward velocity
     speed = agent.me.local_velocity().x
     # apply our throttle in the opposite direction
-    agent.controller.throttle = -utils.cap(speed / utils.BRAKE_ACC, -1, 1)
+    agent.controller.throttle = -utils.cap(speed / (utils.BRAKE_ACC * agent.delta_time), -1, 1)
     # threshold of "we're close enough to stopping"
     return abs(speed) > 100
 
@@ -267,6 +267,61 @@ class GoToBoost(BaseRoutine):
 goto_boost = GoToBoost  # legacy
 
 
+class FaceTarget(BaseRoutine):
+    def __init__(self, target: Optional[Vector]=None, ball: bool=False):
+        self.target = target
+        self.ball = ball
+        self.start_loc = None
+        self.counter = 0
+
+    @staticmethod
+    def get_ball_target(agent: VirxERLU):
+        ball = agent.ball.location if agent.me.minimum_time_to_ball == 7 else agent.ball_prediction_struct.slices[agent.min_intercept_slice].physics.location
+        return Vector(ball.x, ball.y)
+
+    def run(self, agent: VirxERLU):
+        if self.ball:
+            target = self.get_ball_target(agent) - agent.me.location
+        else:
+            target = agent.me.velocity if self.target is None else self.target - agent.me.location
+
+        if agent.gravity.z < -550 and agent.gravity.z > -750:
+            if self.counter == 0 and abs(Vector(x=1).angle(target)) <= 0.05:
+                agent.pop()
+                return
+
+            if self.counter == 0 and agent.me.airborne:
+                self.counter = 3
+
+            if self.counter < 3:
+                self.counter += 1
+
+            target = agent.me.local(target.flatten())
+            if self.counter < 3:
+                agent.controller.jump = True
+            elif agent.me.airborne and abs(Vector(x=1).angle(target)) > 0.05:
+                utils.defaultPD(agent, target)
+            else:
+                agent.pop()
+        else:
+            target = agent.me.local(target.flatten())
+            angle_to_target = abs(Vector(x=1).angle(target))
+            if angle_to_target > 0.1:
+                if self.start_loc is None:
+                    self.start_loc = agent.me.location
+
+                direction = -1 if angle_to_target < 1.57 else 1
+
+                agent.controller.steer = utils.cap(target.y / 100, -1, 1) * direction
+                agent.controller.throttle = direction
+                agent.controller.handbrake = True
+            else:
+                agent.pop()
+                if self.start_loc is not None:
+                    agent.push(GoTo(self.start_loc, target, True))
+face_target = FaceTarget  # legacy
+
+
 class Retreat(BaseRoutine):
     def __init__(self):
         self.goto = goto(Vector(), brake=True)
@@ -275,23 +330,16 @@ class Retreat(BaseRoutine):
         ball = self.get_ball_loc(agent, render=True)
         target = self.get_target(agent, ball=ball)
 
-        # if shadow().is_viable(agent, ignore_distance=True):
-        #     agent.pop()
-        #     agent.push(shadow())
-        #     return
-
-        self_to_target = agent.me.location.flat_dist(target)
-
-        if self_to_target < agent.me.hitbox.width:
+        if Shadow().is_viable(agent, ignore_distance=True):
             agent.pop()
-            agent.push(Brake())
+            agent.push(Shadow())
             return
 
         self.goto.target = target
         self.goto.run(agent)
 
     def is_viable(self, agent):
-        return agent.me.location.flat_dist(self.get_target(agent)) > 320 #and not shadow().is_viable(agent, ignore_distance=True)
+        return agent.me.location.flat_dist(self.get_target(agent)) > 320 and not Shadow().is_viable(agent, ignore_distance=True)
 
     def get_ball_loc(self, agent: VirxERLU, render=False):
         ball_slice = agent.ball.location
@@ -345,6 +393,85 @@ class Retreat(BaseRoutine):
 
         return target.flatten()
 retreat = Retreat # legacy
+
+
+class Shadow(BaseRoutine):
+    def __init__(self):
+        self.goto = goto(Vector(), brake=True)
+
+    def run(self, agent: VirxERLU):
+        ball_loc = self.get_ball_loc(agent, True)
+        target = self.get_target(agent, ball_loc)
+
+        if self.switch_to_retreat(agent, ball_loc, target):
+            agent.pop()
+            agent.push(Retreat())
+            return
+
+        self_to_target = agent.me.location.flat_dist(target)
+
+        if self_to_target < 100 * (agent.me.velocity.magnitude() / 500) and ball_loc.y < -640 and agent.me.velocity.magnitude() < 50 and abs(Vector(x=1).angle2D(agent.me.local_location(agent.ball.location))) > 1:
+            agent.pop()
+            if len(agent.friends) > 1:
+                agent.push(FaceTarget(ball=True))
+        else:
+            self.goto.target = target
+            self.goto.vector = ball_loc * Vector(y=utils.side(agent.team)) if target.y * utils.side(agent.team) < 1280 else None
+            self.goto.run(agent)
+
+    @staticmethod
+    def switch_to_retreat(agent: VirxERLU, ball: Vector, target: Vector):
+        return agent.me.location.y * utils.side(agent.team) < ball.y or ball.y > 2560 or target.y * utils.side(agent.team) > 4480
+
+    def is_viable(self, agent: VirxERLU, ignore_distance: bool=False):
+        ball_loc = self.get_ball_loc(agent)
+        target = self.get_target(agent, ball_loc)
+
+        return (ignore_distance or agent.me.location.flat_dist(target) > 320) and not self.switch_to_retreat(agent, ball_loc, target)
+
+    def get_ball_loc(self, agent: VirxERLU, render: bool=False):
+        ball_slice = agent.ball.location
+        ball_loc = Vector(ball_slice.x, ball_slice.y)
+        if render: agent.sphere(ball_loc + Vector(z=agent.ball_radius), agent.ball_radius, color=agent.renderer.black())
+        ball_loc.y *= utils.side(agent.team)
+
+        if ball_loc.y < -2560 or (ball_loc.y < agent.ball.location.y * utils.side(agent.team)):
+            ball_loc = Vector(agent.ball.location.x, agent.ball.location.y * utils.side(agent.team) - 640)
+
+        return ball_loc
+
+    def get_target(self, agent: VirxERLU, ball_loc=None):
+        if ball_loc is None:
+            ball_loc = self.get_ball_loc(agent)
+
+        if len(agent.friends) > 0:
+            distance = 3840
+        else:
+            distances = [
+                1920,
+                3840,
+                4800
+            ]
+            distance = distances[min(len(agent.friends), 2)]
+
+        target = Vector(y=(ball_loc.y + distance) * utils.side(agent.team))
+        if target.y * utils.side(agent.team) > -1280:
+            # find the proper x coord for us to stop a shot going to the net
+            # y = mx + b <- yes, finally! 7th grade math is paying off xD
+            p1 = Retreat().get_target(agent)
+            p2 = ball_loc * Vector(x=1, y=utils.side(agent.team))
+            try:
+                m = (p2.y - p1.y) / (p2.x - p1.x)
+                b = p1.y - (m * p1.x)
+                # x = (y - b) / m
+                target.x = (target.y - b) / m
+            except ZeroDivisionError:
+                target.x = 0
+        else:
+            target.x = (abs(ball_loc.x) + 640) * utils.sign(ball_loc.x)
+
+        return Vector(target.x, target.y)
+shadow = Shadow # legacy
 
 
 class GenericKickoff(BaseRoutine):

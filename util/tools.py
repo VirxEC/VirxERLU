@@ -3,7 +3,6 @@ from typing import Optional, Tuple
 import virx_erlu_rlib as rlru
 
 from util.agent import VirxERLU
-# from util.routines import Aerial, double_jump, ground_shot, jump_shot
 from util.routines import GroundShot
 from util.utils import Vector
 

@@ -124,14 +124,14 @@ class Bot(VirxERLU):
                     # Retreat back to the net
                     self.push(retreat)
             # If the ball isn't in our half
-            # else:
-            #     shadow_routine = routines.shadow()
-            #     # Check if the shadow routine is viable
-            #     if shadow_routine.is_viable(self):
-            #         # Shadow
-            #         self.push(shadow_routine)
+            else:
+                shadow = routines.Shadow()
+                # Check if the shadow routine is viable
+                if shadow.is_viable(self):
+                    # Shadow
+                    self.push(shadow)
 
-        # If we get here, then we are doing our kickoff, nor can we shoot, nor can we retreat or shadow - so let's just wait!
+        # If we get here, then we aren't doing our kickoff, nor can we shoot, nor can we retreat or shadow - so let's just wait!
 
     def goto_nearest_boost(self):
         # Get a list of all of the large, active boosts
