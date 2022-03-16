@@ -52,8 +52,6 @@ class VirxERLU(BaseAgent):
     def initialize_agent(self):
         self.startup_time = time_ns()
 
-        rlru.load_soccar()
-
         T = datetime.now()
         T = T.strftime("%Y-%m-%d %H;%M")
 
@@ -75,6 +73,9 @@ class VirxERLU(BaseAgent):
         self.print("Building game information")
 
         match_settings = self.get_match_settings()
+        self.game_map = match_settings.GameMapUpk().decode()
+        self.print("Current map: " + self.game_map)
+
         mutators = match_settings.MutatorSettings()
 
         gravity = (
@@ -115,6 +116,29 @@ class VirxERLU(BaseAgent):
         self.boost_amount = boost_amount[mutators.BoostOption()]
         self.game_mode = game_mode[match_settings.GameMode()]
         self.ball_radius = 92.75
+
+        self.expected_pads = -1
+
+        if self.game_mode in {"soccer", "rumble"}:
+            if self.game_map == "ThrowbackStadium_P":
+                self.print("Loading Soccer on Throwback Stadium")
+                rlru.load_soccar_throwback()
+                self.expected_pads = 44
+            else:
+                self.print("Loading standard Soccer")
+                rlru.load_soccar()
+                self.expected_pads = 34
+        elif self.game_mode == "dropshot":
+            self.print("Loading Dropshot")
+            rlru.load_dropshot()
+            self.expected_pads = 0
+        elif self.game_mode == "hoops":
+            self.print("Loading Hoops")
+            rlru.load_hoops()
+            self.expected_pads = 20
+        else:
+            self.print("VirxERLU-RLib does not support this game mode: " + self.game_mode + "; Defaulting to soccer")
+            rlru.load_soccar()
 
         self.all: list[car_object] = ()
         self.friends: list[car_object] = ()
@@ -163,8 +187,8 @@ class VirxERLU(BaseAgent):
     def get_ready(self, packet: GameTickPacket):
         field_info = self.get_field_info()
         self.boosts = tuple(boost_object(i, field_info.boost_pads[i].location, field_info.boost_pads[i].is_full_boost) for i in range(field_info.num_boosts))
-        if len(self.boosts) != 34:
-            print(f"There are {len(self.boosts)} boost pads! @Tarehart REEEEE!")
+        if self.expected_pads != -1 and len(self.boosts) != self.expected_pads:
+            print(f"There are {len(self.boosts)} boost pads instead of {self.expected_pads}! @Tarehart REEEEE!")
             for i, boost in enumerate(self.boosts):
                 print(f"{boost.location} ({i})")
 
