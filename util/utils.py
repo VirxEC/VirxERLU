@@ -384,6 +384,34 @@ def get_landing_time(fall_distance: float, falling_time_until_terminal_velocity:
     return falling_time_until_terminal_velocity + ((fall_distance - falling_distance_until_terminal_velocity) / terminal_velocity)
 
 
+def get_ground_times(l: Vector, v: Vector, g: float) -> Tuple(float, float):
+    times = [-1, -1]
+
+    # this is the vertex of the equation, which also happens to be the apex of the trajectory
+    h = v.z / -g # time to apex
+    k = v.z * v.z / -g # vertical height at apex
+
+    # a is the current gravity... because reasons
+    # a = g
+
+    # if the gravity is inverted, the the ceiling becomes the floor and the floor becomes the ceiling...
+    if g < 0 and l.z + k >= 2030:
+        times[0] = vertex_quadratic_solve_for_x_min_non_neg(g, h, k, 2030 - l.z)
+    elif g > 0 and l.z + k <= 20:
+        times[1] = vertex_quadratic_solve_for_x_min_non_neg(g, h, k, 12 - l.z)
+
+    # this is necessary because after we reach our terminal velocity, the equation becomes linear (distance_remaining / terminal_velocity)
+    terminal_velocity = math.copysign(2300 - v.flatten().magnitude(), g)
+    falling_time_until_terminal_velocity = (terminal_velocity - v.z) / g
+    falling_distance_until_terminal_velocity = v.z * falling_time_until_terminal_velocity + -g * (falling_time_until_terminal_velocity * falling_time_until_terminal_velocity) / 2.
+
+    fall_distance = -l.z + (17 if g < 0 else 2030)
+    i = 1 if g < 0 else 0
+    times[i] = get_landing_time(fall_distance, falling_time_until_terminal_velocity, falling_distance_until_terminal_velocity, terminal_velocity, k, h, g)
+
+    return times
+
+
 def find_landing_plane(l: Vector, v: Vector, g: float) -> int:
     if abs(l.y) >= 5120 or (v.x == 0 and v.y == 0 and g == 0):
         return 5
@@ -399,34 +427,8 @@ def find_landing_plane(l: Vector, v: Vector, g: float) -> int:
         times[3] = (-5110 - l.y) / v.y
 
     if g != 0:
-        # this is the vertex of the equation, which also happens to be the apex of the trajectory
-        h = v.z / -g # time to apex
-        k = v.z * v.z / -g # vertical height at apex
-
-        # a is the current gravity... because reasons
-        # a = g
-
-        climb_dist = -l.z
-
-        # if the gravity is inverted, the the ceiling becomes the floor and the floor becomes the ceiling...
-        if g < 0:
-            climb_dist += 2030
-            if k >= climb_dist:
-                times[4] = vertex_quadratic_solve_for_x_min_non_neg(g, h, k, climb_dist)
-        elif g > 0:
-            climb_dist += 20
-            if k <= climb_dist:
-                times[5] = vertex_quadratic_solve_for_x_min_non_neg(g, h, k, climb_dist)
-
-        # this is necessary because after we reach our terminal velocity, the equation becomes linear (distance_remaining / terminal_velocity)
-        terminal_velocity = math.copysign(2300 - v.flatten().magnitude(), g)
-        falling_time_until_terminal_velocity = (terminal_velocity - v.z) / g
-        falling_distance_until_terminal_velocity = v.z * falling_time_until_terminal_velocity + -g * (falling_time_until_terminal_velocity * falling_time_until_terminal_velocity) / 2.
-
-        fall_distance = -l.z
-        if g < 0:
-            times[5] = get_landing_time(fall_distance + 20, falling_time_until_terminal_velocity, falling_distance_until_terminal_velocity, terminal_velocity, k, h, g)
-        else:
-            times[4] = get_landing_time(fall_distance + 2030, falling_time_until_terminal_velocity, falling_distance_until_terminal_velocity, terminal_velocity, k, h, g)
+        t = get_ground_times(l, v, g)
+        times[4] = t[0]
+        times[5] = t[1]
 
     return times.index(min(item for item in times if item >= 0))
