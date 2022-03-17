@@ -945,7 +945,7 @@ class Matrix3:
 class Vector:
     def __init__(self, x: float=0, y: float=0, z: float=0, np_arr: Optional[np.ndarray]=None):
         # this is a private property - this is so all other things treat this class like a list, and so should you!
-        self._np = np.array([x, y, z]) if np_arr is None else np_arr
+        self._np = np.array([x, y, z], dtype=np.float32) if np_arr is None else np_arr
 
     def __getitem__(self, index: int):
         return self._np[index].item()
@@ -1040,6 +1040,10 @@ class Vector:
         # Rounds all of the values
         return Vector(np_arr=np.around(self._np, decimals=decimals))
 
+    # abs(self)
+    def __abs__(self) -> Vector:
+        return Vector(np_arr=np.absolute(self._np))
+
     @staticmethod
     def from_vector(vec: Vector3) -> Vector:
         return Vector(vec.x, vec.y, vec.z)
@@ -1051,8 +1055,8 @@ class Vector:
         # Returns the length of the vector
         return np.linalg.norm(self._np).item()
 
-    def _magnitude(self) -> np.float64:
-        # Returns the length of the vector in a numpy float 64
+    def _magnitude(self) -> np.float32:
+        # Returns the length of the vector in a numpy float f32
         return np.linalg.norm(self._np)
 
     def dot(self, value: Vector|np.ndarray) -> float:

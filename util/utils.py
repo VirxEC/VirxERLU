@@ -2,6 +2,9 @@ import math
 from queue import Full
 from typing import Generator, Optional, Tuple
 
+import numpy as np
+from numba import njit
+
 from util.agent import Vector, VirxERLU
 
 COAST_ACC = 525.0
@@ -15,6 +18,12 @@ MIN_WALL_SPEED = -0.5 * BRAKE_ACC
 
 
 def cap(x, low, high):
+    # caps/clamps a number between a low and high value
+    return low if x < low else (high if x > high else x)
+
+
+@njit(fastmath=True)
+def _fcap(x: float, low: float, high: float) -> float:
     # caps/clamps a number between a low and high value
     return low if x < low else (high if x > high else x)
 
@@ -75,6 +84,15 @@ def defaultThrottle(agent: VirxERLU, target_speed: float, target_angles: Optiona
     # https://github.com/samuelpmish/RLUtilities/blob/develop/src/mechanics/drive.cc#L182
     # I had to make a few changes because it didn't play very nice with driving backwards
 
+    (throttle, boost) = _get_throttle_and_boost(agent.boost_accel, target_speed, car_speed, angle_to_target, agent.me.up.z, agent.controller.handbrake)
+    agent.controller.throttle = throttle
+    agent.controller.boost = boost
+
+    return car_speed
+
+
+@njit(fastmath=True)
+def _get_throttle_and_boost(boost_accel: float, target_speed: float, car_speed: float, angle_to_target: float, up_z: float, handbrake: bool) -> Tuple[float, bool]:
     t = target_speed - car_speed
     acceleration = t / REACTION_TIME
     if car_speed < 0: acceleration *= -1  # if we're going backwards, flip it so it thinks we're driving forwards
@@ -82,14 +100,17 @@ def defaultThrottle(agent: VirxERLU, target_speed: float, target_angles: Optiona
     brake_coast_transition = BRAKE_COAST_TRANSITION
     coasting_throttle_transition = COASTING_THROTTLE_TRANSITION
     throttle_accel = throttle_acceleration(car_speed)
-    throttle_boost_transition = 1 * throttle_accel + 0.5 * agent.boost_accel
+    throttle_boost_transition = 1 * throttle_accel + 0.5 * boost_accel
 
-    if agent.me.up.z < 0.7:
+    if up_z < 0.7:
         brake_coast_transition = coasting_throttle_transition = MIN_WALL_SPEED
+
+    throttle = 0
+    boost = False
 
     # apply brakes when the desired acceleration is negative and large enough
     if acceleration <= brake_coast_transition:
-        agent.controller.throttle = -1
+        throttle = -1
 
     # let the car coast when the acceleration is negative and small
     elif brake_coast_transition < acceleration and acceleration < coasting_throttle_transition:
@@ -97,19 +118,19 @@ def defaultThrottle(agent: VirxERLU, target_speed: float, target_angles: Optiona
 
     # for small positive accelerations, use throttle only
     elif coasting_throttle_transition <= acceleration and acceleration <= throttle_boost_transition:
-        agent.controller.throttle = 1 if throttle_accel == 0 else cap(acceleration / throttle_accel, 0.02, 1)
+        throttle = 1 if throttle_accel == 0 else _fcap(acceleration / throttle_accel, 0.02, 1)
 
     # if the desired acceleration is big enough, use boost
     elif throttle_boost_transition < acceleration:
-        agent.controller.throttle = 1
-        if not agent.controller.handbrake:
+        throttle = 1
+        if not handbrake:
             if t > 0 and angle_to_target < 1:
-                agent.controller.boost = True  # don't boost when we need to lose speed, we we're using handbrake, or when we aren't facing the target
+                boost = True  # don't boost when we need to lose speed, we we're using handbrake, or when we aren't facing the target
 
     if car_speed < 0:
-        agent.controller.throttle *= -1  # earlier we flipped the sign of the acceleration, so we have to flip the sign of the throttle for it to be correct
+        throttle *= -1  # earlier we flipped the sign of the acceleration, so we have to flip the sign of the throttle for it to be correct
 
-    return car_speed
+    return throttle, boost
 
 
 def defaultDrive(agent: VirxERLU, target_speed: float, local_target: Vector) -> Tuple[Tuple[Vector, Vector, Vector], float]:
@@ -124,29 +145,31 @@ def get_max_speed_from_local_point(point: Vector) -> float:
     return curvature_to_velocity(1 / turn_rad)
 
 
+@njit(fastmath=True)
 def curvature_to_velocity(curve: float) -> float:
-    curve = cap(curve, 0.00088, 0.0069)
+    curve = _fcap(curve, 0.00088, 0.0069)
     if 0.00088 <= curve <= 0.00110:
         u = (curve - 0.00088) / (0.00110 - 0.00088)
-        return lerp(2300, 1750, u)
+        return _flerp(2300, 1750, u)
 
     if 0.00110 <= curve <= 0.00138:
         u = (curve - 0.00110) / (0.00138 - 0.00110)
-        return lerp(1750, 1500, u)
+        return _flerp(1750, 1500, u)
 
     if 0.00138 <= curve <= 0.00235:
         u = (curve - 0.00138) / (0.00235 - 0.00138)
-        return lerp(1500, 1000, u)
+        return _flerp(1500, 1000, u)
 
     if 0.00235 <= curve <= 0.00398:
         u = (curve - 0.00235) / (0.00398 - 0.00235)
-        return lerp(1000, 500, u)
+        return _flerp(1000, 500, u)
 
     if 0.00398 <= curve <= 0.0069:
         u = (curve - 0.00398) / (0.0069 - 0.00398)
-        return lerp(500, 0, u)
+        return _flerp(500, 0, u)
 
 
+@njit(fastmath=True)
 def throttle_acceleration(car_velocity_x: float) -> float:
     x = abs(car_velocity_x)
     if x >= 1410:
@@ -168,6 +191,7 @@ def is_inside_turn_radius(turn_rad: float, local_target: Vector, steer_direction
     return circle.dist(local_target) < turn_rad
 
 
+@njit(fastmath=True)
 def turn_radius(v: float) -> float:
     # v is the magnitude of the velocity in the car's forward direction
     if v == 0:
@@ -175,6 +199,7 @@ def turn_radius(v: float) -> float:
     return 1.0 / curvature(v)
 
 
+@njit(fastmath=True)
 def curvature(v: float) -> float:
     # v is the magnitude of the velocity in the car's forward direction
     if 0 <= v < 500:
@@ -197,7 +222,7 @@ def curvature(v: float) -> float:
 
 def in_field(point: Vector, radius: float) -> bool:
     # determines if a point is inside the standard soccer field
-    point = Vector(abs(point.x), abs(point.y), abs(point.z))
+    point = abs(point)
     return not (point.x > 4080 - radius or point.y > 5900 - radius or (point.x > 880 - radius and point.y > 5105 - radius) or (point.x > 2650 and point.y > -point.x + 8025 - radius))
 
 
@@ -215,32 +240,31 @@ def find_slope(shot_vector: Vector, car_to_target: Vector) -> float:
     return cap(f, -3, 3)
 
 
-def quadratic(a: float, b: float, c: float) -> Tuple[float, float]:
+@njit(fastmath=True)
+def quadratic(a: float, b: float, c: float) -> Tuple[Optional[float], Optional[float]]:
     # Returns the two roots of a quadratic
     inside = (b*b) - (4*a*c)
 
-    try:
-        inside = math.sqrt(inside)
-    except ValueError:
-        return ()
-
     if inside < 0:
-        return ()
+        return None, None
 
     b = -b
     a = 2*a
 
     if inside == 0:
-        return (b/a,)
+        return b/a, None
 
+    inside = math.sqrt(inside)
     return (b + inside)/a, (b - inside)/a
 
 
+@njit(fastmath=True)
 def side(x: int) -> int:  # Literal[-1, 1]:
     # returns -1 for blue team and 1 for orange team
     return (-1, 1)[x]
 
 
+@njit(fastmath=True)
 def sign(x: float) -> int:  # Literal[-1, 0, 1]:
     # returns the sign of a number, -1, 0, +1
     if x < 0:
@@ -252,12 +276,21 @@ def sign(x: float) -> int:  # Literal[-1, 0, 1]:
     return 0
 
 
+@njit(fastmath=True)
 def steerPD(angle: float, rate: float) -> float:
     # A Proportional-Derivative control loop used for defaultPD
-    return cap(((35*(angle+rate))**3)/10, -1, 1)
+    return _fcap(((35*(angle+rate))**3)/10, -1, 1)
 
 
 def lerp(a, b, t):
+    # Linearly interpolate from a to b using t
+    # For instance, when t == 0, a is returned, and when t is 1, b is returned
+    # Works for both numbers and Vectors
+    return (b - a) * t + a
+
+
+@njit
+def _flerp(a: float, b: float, t: float) -> float:
     # Linearly interpolate from a to b using t
     # For instance, when t == 0, a is returned, and when t is 1, b is returned
     # Works for both numbers and Vectors
@@ -292,6 +325,7 @@ def peek_generator(generator: Generator):
         return
 
 
+@njit(fastmath=True)
 def almost_equals(x: float, y: float, threshold: float) -> bool:
     return x - threshold < y and y < x + threshold
 
@@ -311,6 +345,7 @@ def point_inside_quadrilateral_2d(point: Vector, quadrilateral: Tuple[Vector, Ve
     return almost_equals(actual_area, quadrilateral_area, 0.001)
 
 
+@njit(fastmath=True)
 def perimeter_of_ellipse(a: float, b: float) -> bool:
     return math.pi * (3*(a+b) - math.sqrt((3*a + b) * (a + 3*b)))
 
@@ -360,6 +395,7 @@ def ray_intersects_with_circle(origin: Vector, direction: Vector, center: Vector
     return t0 > 0 or t1 > 0
 
 
+@njit(fastmath=True)
 def min_non_neg(x: float, y: float) -> float:
     return x if (x < y and x >= 0) or (y < 0 and x >= 0) else y
 
@@ -370,42 +406,50 @@ def min_non_neg(x: float, y: float) -> float:
 # (y - k) / a = (x - h)^2
 # sqrt((y - k) / a) = x - h
 # sqrt((y - k) / a) + h = x
+@njit(fastmath=True)
 def vertex_quadratic_solve_for_x_min_non_neg(a: float, h: float, k: float, y: float) -> float:
-    try:
-        v_sqrt = math.sqrt((y - k) / a)
-    except ValueError:
+    if a == 0:
         return 0
+
+    inner = (y - k) / a
+    if inner < 0:
+        return 0
+
+    v_sqrt = math.sqrt(inner)
     return min_non_neg(v_sqrt + h, -v_sqrt + h)
 
 
+@njit(fastmath=True)
 def get_landing_time(fall_distance: float, falling_time_until_terminal_velocity: float, falling_distance_until_terminal_velocity: float, terminal_velocity: float, k: float, h: float, g: float) -> float:
     if fall_distance * sign(-g) <= falling_distance_until_terminal_velocity * sign(-g):
         return vertex_quadratic_solve_for_x_min_non_neg(g, h, k, fall_distance)
     return falling_time_until_terminal_velocity + ((fall_distance - falling_distance_until_terminal_velocity) / terminal_velocity)
 
 
-def get_ground_times(l: Vector, v: Vector, g: float) -> Tuple(float, float):
+@njit(fastmath=True)
+def _get_ground_times(l: np.ndarray, v: np.ndarray, g: float) -> Tuple[float, float]:
     times = [-1, -1]
 
     # this is the vertex of the equation, which also happens to be the apex of the trajectory
-    h = v.z / -g # time to apex
-    k = v.z * v.z / -g # vertical height at apex
+    h = v[2] / -g # time to apex
+    k = v[2] * v[2] / -g # vertical height at apex
 
     # a is the current gravity... because reasons
     # a = g
 
     # if the gravity is inverted, the the ceiling becomes the floor and the floor becomes the ceiling...
-    if g < 0 and l.z + k >= 2030:
-        times[0] = vertex_quadratic_solve_for_x_min_non_neg(g, h, k, 2030 - l.z)
-    elif g > 0 and l.z + k <= 20:
-        times[1] = vertex_quadratic_solve_for_x_min_non_neg(g, h, k, 12 - l.z)
+    if g < 0 and l[2] + k >= 2030:
+        times[0] = vertex_quadratic_solve_for_x_min_non_neg(g, h, k, 2030 - l[2])
+    elif g > 0 and l[2] + k <= 20:
+        times[1] = vertex_quadratic_solve_for_x_min_non_neg(g, h, k, 12 - l[2])
 
     # this is necessary because after we reach our terminal velocity, the equation becomes linear (distance_remaining / terminal_velocity)
-    terminal_velocity = math.copysign(2300 - v.flatten().magnitude(), g)
-    falling_time_until_terminal_velocity = (terminal_velocity - v.z) / g
-    falling_distance_until_terminal_velocity = v.z * falling_time_until_terminal_velocity + -g * (falling_time_until_terminal_velocity * falling_time_until_terminal_velocity) / 2.
+    # NOTE: this is a simplification of what actually happens, which is a fair bit more complicated
+    terminal_velocity = math.copysign(2300 - np.linalg.norm(v[:2]), g)   
+    falling_time_until_terminal_velocity = (terminal_velocity - v[2]) / g
+    falling_distance_until_terminal_velocity = v[2] * falling_time_until_terminal_velocity + -g * (falling_time_until_terminal_velocity * falling_time_until_terminal_velocity) / 2
 
-    fall_distance = -l.z + (17 if g < 0 else 2030)
+    fall_distance = -l[2] + (17 if g < 0 else 2030)
     i = 1 if g < 0 else 0
     times[i] = get_landing_time(fall_distance, falling_time_until_terminal_velocity, falling_distance_until_terminal_velocity, terminal_velocity, k, h, g)
 
@@ -427,8 +471,9 @@ def find_landing_plane(l: Vector, v: Vector, g: float) -> int:
         times[3] = (-5110 - l.y) / v.y
 
     if g != 0:
-        t = get_ground_times(l, v, g)
+        t = _get_ground_times(l._np, v._np, g)
         times[4] = t[0]
         times[5] = t[1]
 
     return times.index(min(item for item in times if item >= 0))
+
