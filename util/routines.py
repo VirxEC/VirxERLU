@@ -122,7 +122,7 @@ def brake_handler(agent: VirxERLU) -> bool:
     # apply our throttle in the opposite direction
     agent.controller.throttle = -utils.cap(speed / (utils.BRAKE_ACC * agent.delta_time), -1, 1)
     # threshold of "we're close enough to stopping"
-    return abs(speed) > 100
+    return abs(speed) < 100
 
 
 class Brake(BaseRoutine):
