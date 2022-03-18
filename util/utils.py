@@ -22,7 +22,7 @@ def cap(x, low, high):
     return low if x < low else (high if x > high else x)
 
 
-@njit(fastmath=True)
+@njit('float32(float32, float32, float32)', fastmath=True, cache=True)
 def _fcap(x: float, low: float, high: float) -> float:
     # caps/clamps a number between a low and high value
     return low if x < low else (high if x > high else x)
@@ -36,26 +36,44 @@ def cap_in_field(agent: VirxERLU, target: Vector) -> Vector:
     return target
 
 
+@njit('float32(float32, float32)', fastmath=True, cache=True)
+def steerPD(angle: float, rate: float) -> float:
+    # A Proportional-Derivative control loop used for defaultPD
+    return _fcap(((35*(angle+rate))**3)/10, -1, 1)
+
+
+@njit('Array(float32, 1, "C")(Array(float32, 1, "C"), Array(float32, 1, "C"))', fastmath=True, cache=True)
+def _get_controller(target_angles: np.ndarray, angular_velocity: np.ndarray) -> np.ndarray:
+    # Once we have the angles we need to rotate, we feed them into PD loops to determing the controller inputs
+    steer = _fcap(3.4 * target_angles[1] + 0.235 * angular_velocity[2], -1, 1)  # Use RLU PID to steer towards target
+    pitch = steerPD(target_angles[0], angular_velocity[1] / 4)
+    yaw = steerPD(target_angles[1], -angular_velocity[2] / 4)
+    roll = steerPD(target_angles[2], angular_velocity[0] / 4)
+    
+    return np.array((steer, pitch, yaw, roll), dtype=np.float32)
+
+
 def defaultPD(agent: VirxERLU, local_target: Vector, upside_down: bool=False, up: Optional[Vector]=None) -> Tuple[float, float, float]:
     # points the car towards a given local target.
     # Direction can be changed to allow the car to steer towards a target while driving backwards
 
     if up is None:
         up = agent.me.local(Vector(z=-1 if upside_down else 1))  # where "up" is in local coordinates
+
     target_angles = (
         math.atan2(local_target.z, local_target.x),  # angle required to pitch towards target
         math.atan2(local_target.y, local_target.x),  # angle required to yaw towards target
         math.atan2(up.y, up.z)  # angle required to roll upright
     )
+    
+    controller = _get_controller(np.array(target_angles), agent.me.angular_velocity._np)
 
-    # Once we have the angles we need to rotate, we feed them into PD loops to determing the controller inputs
-    agent.controller.steer = cap(3.4 * target_angles[1] + 0.235 * agent.me.angular_velocity.z, -1, 1)  # Use RLU PID to steer towards target
-    agent.controller.pitch = steerPD(target_angles[0], agent.me.angular_velocity.y/4)
-    agent.controller.yaw = steerPD(target_angles[1], -agent.me.angular_velocity.z/4)
-    agent.controller.roll = steerPD(target_angles[2], agent.me.angular_velocity.x/4)
-    # Returns the angles, which can be useful for other purposes
+    agent.controller.steer = controller[0]
+    agent.controller.pitch = controller[1]
+    agent.controller.yaw = controller[2]
+    agent.controller.roll = controller[3]
+
     return target_angles
-
 
 def defaultThrottle(agent: VirxERLU, target_speed: float, target_angles: Optional[Tuple[float, float, float]]=None, local_target: Optional[Vector]=None) -> float:
     # accelerates the car to a desired speed using throttle and boost
@@ -91,7 +109,21 @@ def defaultThrottle(agent: VirxERLU, target_speed: float, target_angles: Optiona
     return car_speed
 
 
-@njit(fastmath=True)
+@njit('float32(float32)', fastmath=True, cache=True)
+def throttle_acceleration(car_velocity_x: float) -> float:
+    x = abs(car_velocity_x)
+    if x >= 1410:
+        return 0
+
+    # use y = mx + b to find the throttle acceleration
+    if x < 1400:
+        return (-36 / 35) * x + 1600
+
+    x -= 1400
+    return -16 * x + 160
+
+
+@njit('Tuple((float32, boolean))(float32, float32, float32, float32, float32, boolean)', fastmath=True, cache=True)
 def _get_throttle_and_boost(boost_accel: float, target_speed: float, car_speed: float, angle_to_target: float, up_z: float, handbrake: bool) -> Tuple[float, bool]:
     t = target_speed - car_speed
     acceleration = t / REACTION_TIME
@@ -145,7 +177,29 @@ def get_max_speed_from_local_point(point: Vector) -> float:
     return curvature_to_velocity(1 / turn_rad)
 
 
-@njit(fastmath=True)
+def lerp(a, b, t):
+    # Linearly interpolate from a to b using t
+    # For instance, when t == 0, a is returned, and when t is 1, b is returned
+    # Works for both numbers and Vectors
+    return (b - a) * t + a
+
+
+@njit('float32(float32, float32, float32)', fastmath=True, cache=True)
+def _flerp(a: float, b: float, t: float) -> float:
+    # Linearly interpolate from a to b using t
+    # For instance, when t == 0, a is returned, and when t is 1, b is returned
+    # Works for both numbers and Vectors
+    return (b - a) * t + a
+
+
+def invlerp(a, b, v):
+    # Inverse linear interpolation from a to b with value v
+    # For instance, it returns 0 if v is a, and returns 1 if v is b, and returns 0.5 if v is exactly between a and b
+    # Works for both numbers and Vectors
+    return (v - a) / (b - a)
+
+
+@njit('float32(float32)', fastmath=True, cache=True)
 def curvature_to_velocity(curve: float) -> float:
     curve = _fcap(curve, 0.00088, 0.0069)
     if 0.00088 <= curve <= 0.00110:
@@ -164,23 +218,8 @@ def curvature_to_velocity(curve: float) -> float:
         u = (curve - 0.00235) / (0.00398 - 0.00235)
         return _flerp(1000, 500, u)
 
-    if 0.00398 <= curve <= 0.0069:
-        u = (curve - 0.00398) / (0.0069 - 0.00398)
-        return _flerp(500, 0, u)
-
-
-@njit(fastmath=True)
-def throttle_acceleration(car_velocity_x: float) -> float:
-    x = abs(car_velocity_x)
-    if x >= 1410:
-        return 0
-
-    # use y = mx + b to find the throttle acceleration
-    if x < 1400:
-        return (-36 / 35) * x + 1600
-
-    x -= 1400
-    return -16 * x + 160
+    u = (curve - 0.00398) / (0.0069 - 0.00398)
+    return _flerp(500, 0, u)
 
 
 def is_inside_turn_radius(turn_rad: float, local_target: Vector, steer_direction: int) -> bool:
@@ -191,15 +230,7 @@ def is_inside_turn_radius(turn_rad: float, local_target: Vector, steer_direction
     return circle.dist(local_target) < turn_rad
 
 
-@njit(fastmath=True)
-def turn_radius(v: float) -> float:
-    # v is the magnitude of the velocity in the car's forward direction
-    if v == 0:
-        return 0
-    return 1.0 / curvature(v)
-
-
-@njit(fastmath=True)
+@njit('float32(float32)', fastmath=True, cache=True)
 def curvature(v: float) -> float:
     # v is the magnitude of the velocity in the car's forward direction
     if 0 <= v < 500:
@@ -218,6 +249,14 @@ def curvature(v: float) -> float:
         return 0.0018 - 0.4e-7 * v
 
     return 0
+
+
+@njit('float32(float32)', fastmath=True, cache=True)
+def turn_radius(v: float) -> float:
+    # v is the magnitude of the velocity in the car's forward direction
+    if v == 0:
+        return 0
+    return 1.0 / curvature(v)
 
 
 def in_field(point: Vector, radius: float) -> bool:
@@ -240,7 +279,7 @@ def find_slope(shot_vector: Vector, car_to_target: Vector) -> float:
     return cap(f, -3, 3)
 
 
-@njit(fastmath=True)
+@njit(fastmath=True, cache=True)
 def quadratic(a: float, b: float, c: float) -> Tuple[Optional[float], Optional[float]]:
     # Returns the two roots of a quadratic
     inside = (b*b) - (4*a*c)
@@ -258,13 +297,13 @@ def quadratic(a: float, b: float, c: float) -> Tuple[Optional[float], Optional[f
     return (b + inside)/a, (b - inside)/a
 
 
-@njit(fastmath=True)
+@njit('int32(int32)', fastmath=True, cache=True)
 def side(x: int) -> int:  # Literal[-1, 1]:
     # returns -1 for blue team and 1 for orange team
     return (-1, 1)[x]
 
 
-@njit(fastmath=True)
+@njit('int32(float32)', fastmath=True, cache=True)
 def sign(x: float) -> int:  # Literal[-1, 0, 1]:
     # returns the sign of a number, -1, 0, +1
     if x < 0:
@@ -274,34 +313,6 @@ def sign(x: float) -> int:  # Literal[-1, 0, 1]:
         return 1
 
     return 0
-
-
-@njit(fastmath=True)
-def steerPD(angle: float, rate: float) -> float:
-    # A Proportional-Derivative control loop used for defaultPD
-    return _fcap(((35*(angle+rate))**3)/10, -1, 1)
-
-
-def lerp(a, b, t):
-    # Linearly interpolate from a to b using t
-    # For instance, when t == 0, a is returned, and when t is 1, b is returned
-    # Works for both numbers and Vectors
-    return (b - a) * t + a
-
-
-@njit
-def _flerp(a: float, b: float, t: float) -> float:
-    # Linearly interpolate from a to b using t
-    # For instance, when t == 0, a is returned, and when t is 1, b is returned
-    # Works for both numbers and Vectors
-    return (b - a) * t + a
-
-
-def invlerp(a, b, v):
-    # Inverse linear interpolation from a to b with value v
-    # For instance, it returns 0 if v is a, and returns 1 if v is b, and returns 0.5 if v is exactly between a and b
-    # Works for both numbers and Vectors
-    return (v - a) / (b - a)
 
 
 def send_comm(agent: VirxERLU, msg: dict):
@@ -325,7 +336,7 @@ def peek_generator(generator: Generator):
         return
 
 
-@njit(fastmath=True)
+@njit('boolean(float32, float32, float32)', fastmath=True, cache=True)
 def almost_equals(x: float, y: float, threshold: float) -> bool:
     return x - threshold < y and y < x + threshold
 
@@ -345,7 +356,7 @@ def point_inside_quadrilateral_2d(point: Vector, quadrilateral: Tuple[Vector, Ve
     return almost_equals(actual_area, quadrilateral_area, 0.001)
 
 
-@njit(fastmath=True)
+@njit('boolean(float32, float32)', fastmath=True, cache=True)
 def perimeter_of_ellipse(a: float, b: float) -> bool:
     return math.pi * (3*(a+b) - math.sqrt((3*a + b) * (a + 3*b)))
 
@@ -395,7 +406,7 @@ def ray_intersects_with_circle(origin: Vector, direction: Vector, center: Vector
     return t0 > 0 or t1 > 0
 
 
-@njit(fastmath=True)
+@njit('float32(float32, float32)', fastmath=True, cache=True)
 def min_non_neg(x: float, y: float) -> float:
     return x if (x < y and x >= 0) or (y < 0 and x >= 0) else y
 
@@ -406,7 +417,7 @@ def min_non_neg(x: float, y: float) -> float:
 # (y - k) / a = (x - h)^2
 # sqrt((y - k) / a) = x - h
 # sqrt((y - k) / a) + h = x
-@njit(fastmath=True)
+@njit('float32(float32, float32, float32, float32)', fastmath=True, cache=True)
 def vertex_quadratic_solve_for_x_min_non_neg(a: float, h: float, k: float, y: float) -> float:
     if a == 0:
         return 0
@@ -419,16 +430,16 @@ def vertex_quadratic_solve_for_x_min_non_neg(a: float, h: float, k: float, y: fl
     return min_non_neg(v_sqrt + h, -v_sqrt + h)
 
 
-@njit(fastmath=True)
+@njit('float32(float32, float32, float32, float32, float32, float32, float32)', fastmath=True, cache=True)
 def get_landing_time(fall_distance: float, falling_time_until_terminal_velocity: float, falling_distance_until_terminal_velocity: float, terminal_velocity: float, k: float, h: float, g: float) -> float:
     if fall_distance * sign(-g) <= falling_distance_until_terminal_velocity * sign(-g):
         return vertex_quadratic_solve_for_x_min_non_neg(g, h, k, fall_distance)
     return falling_time_until_terminal_velocity + ((fall_distance - falling_distance_until_terminal_velocity) / terminal_velocity)
 
 
-@njit(fastmath=True)
-def _get_ground_times(l: np.ndarray, v: np.ndarray, g: float) -> Tuple[float, float]:
-    times = [-1, -1]
+@njit('Array(float32, 1, "C")(Array(float32, 1, "C"), Array(float32, 1, "C"), float32)', fastmath=True, cache=True)
+def _get_ground_times(l: np.ndarray, v: np.ndarray, g: float) -> np.ndarray:
+    times = np.array([-1., -1.], dtype=np.float32)
 
     # this is the vertex of the equation, which also happens to be the apex of the trajectory
     h = v[2] / -g # time to apex

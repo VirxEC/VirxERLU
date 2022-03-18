@@ -11,6 +11,7 @@ from typing import Optional, Tuple
 
 import numpy as np
 import virx_erlu_rlib as rlru
+from numba import njit
 from rlbot.agents.base_agent import BaseAgent, SimpleControllerState
 from rlbot.utils.rendering.rendering_manager import Color
 from rlbot.utils.structures.game_data_struct import (GameTickPacket, Rotator,
@@ -865,15 +866,21 @@ class Matrix3:
         if simple:
             self._np = np.array(((0, 0, 0), (0, 0, 0), (0, 0, 0)))
             return
+        
+        self._np = self._new_matrix(pitch, yaw, roll)
 
-        CP = math.cos(self.pitch)
-        SP = math.sin(self.pitch)
-        CY = math.cos(self.yaw)
-        SY = math.sin(self.yaw)
-        CR = math.cos(self.roll)
-        SR = math.sin(self.roll)
+    @staticmethod
+    @njit('Array(float32, 2, "C")(float32, float32, float32)', fastmath=True, cache=True)
+    def _new_matrix(pitch: float, yaw: float, roll: float) -> np.ndarray:
+        CP = math.cos(pitch)
+        SP = math.sin(pitch)
+        CY = math.cos(yaw)
+        SY = math.sin(yaw)
+        CR = math.cos(roll)
+        SR = math.sin(roll)
+
         # List of 3 vectors, each descriping the direction of an axis: Forward, Left, and Up
-        self._np = np.array((
+        return np.array((
             (CP*CY, CP*SY, SP),
             (CY*SP*SR-CR*SY, SY*SP*SR+CR*CY, -CP*SR),
             (-CR*CY*SP-SR*SY, -CR*SY*SP+SR*CY, CP*CR)
