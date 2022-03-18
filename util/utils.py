@@ -98,10 +98,6 @@ def defaultThrottle(agent: VirxERLU, target_speed: float, target_angles: Optiona
         else:
             agent.controller.steer = agent.controller.yaw
 
-    # Thanks to Chip's RLU speed controller for this
-    # https://github.com/samuelpmish/RLUtilities/blob/develop/src/mechanics/drive.cc#L182
-    # I had to make a few changes because it didn't play very nice with driving backwards
-
     (throttle, boost) = _get_throttle_and_boost(agent.boost_accel, target_speed, car_speed, angle_to_target, agent.me.up.z, agent.controller.handbrake)
     agent.controller.throttle = throttle
     agent.controller.boost = boost
@@ -125,6 +121,9 @@ def throttle_acceleration(car_velocity_x: float) -> float:
 
 @njit('Tuple((float32, boolean))(float32, float32, float32, float32, float32, boolean)', fastmath=True, cache=True)
 def _get_throttle_and_boost(boost_accel: float, target_speed: float, car_speed: float, angle_to_target: float, up_z: float, handbrake: bool) -> Tuple[float, bool]:
+    # Thanks to Chip's RLU speed controller for this
+    # https://github.com/samuelpmish/RLUtilities/blob/develop/src/mechanics/drive.cc#L182
+    # I had to make a few changes because it didn't play very nice with driving backwards
     t = target_speed - car_speed
     acceleration = t / REACTION_TIME
     if car_speed < 0: acceleration *= -1  # if we're going backwards, flip it so it thinks we're driving forwards
@@ -313,6 +312,14 @@ def sign(x: float) -> int:  # Literal[-1, 0, 1]:
         return 1
 
     return 0
+
+
+@njit('boolean(Array(float32, 2, "C"), Array(float32, 1, "C"))', fastmath=True, cache=True)
+def friend_near_target(friends: np.ndarray, target: np.ndarray) -> bool:
+    for i in range(friends.shape[1]):
+        if np.linalg.norm(target - friends[i]) < 400:
+            return True
+    return False
 
 
 def send_comm(agent: VirxERLU, msg: dict):

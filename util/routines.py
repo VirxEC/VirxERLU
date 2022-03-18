@@ -4,7 +4,9 @@ import math
 from traceback import print_exc
 from typing import Optional
 
+import numpy as np
 import virx_erlu_rlib as rlru
+from numba import njit
 
 from util import utils
 from util.agent import BaseRoutine, Vector, VirxERLU, boost_object
@@ -275,7 +277,7 @@ class FaceTarget(BaseRoutine):
         self.counter = 0
 
     @staticmethod
-    def get_ball_target(agent: VirxERLU):
+    def get_ball_target(agent: VirxERLU) -> Vector:
         ball = agent.ball.location if agent.me.minimum_time_to_ball == 7 else agent.ball_prediction_struct.slices[agent.min_intercept_slice].physics.location
         return Vector(ball.x, ball.y)
 
@@ -324,13 +326,13 @@ face_target = FaceTarget  # legacy
 
 class Retreat(BaseRoutine):
     def __init__(self):
-        self.goto = goto(Vector(), brake=True)
+        self.goto = GoTo(Vector(), brake=True)
 
     def run(self, agent: VirxERLU):
         ball = self.get_ball_loc(agent, render=True)
         target = self.get_target(agent, ball=ball)
 
-        if Shadow().is_viable(agent, ignore_distance=True):
+        if Shadow.is_viable(agent, ignore_distance=True):
             agent.pop()
             agent.push(Shadow())
             return
@@ -338,10 +340,11 @@ class Retreat(BaseRoutine):
         self.goto.target = target
         self.goto.run(agent)
 
-    def is_viable(self, agent):
-        return agent.me.location.flat_dist(self.get_target(agent)) > 320 and not Shadow().is_viable(agent, ignore_distance=True)
+    def is_viable(self, agent: VirxERLU) -> bool:
+        return agent.me.location.flat_dist(self.get_target(agent)) > 320 and not Shadow.is_viable(agent, ignore_distance=True)
 
-    def get_ball_loc(self, agent: VirxERLU, render=False):
+    @staticmethod
+    def get_ball_loc(agent: VirxERLU, render: bool=False) -> Vector:
         ball_slice = agent.ball.location
 
         ball = Vector(ball_slice.x, ball_slice.y)
@@ -354,50 +357,60 @@ class Retreat(BaseRoutine):
         return ball
 
     @staticmethod
-    def friend_near_target(agent: VirxERLU, target):
-        for car in agent.friends:
-            if car.location.dist(target) < 400:
-                return True
-        return False
-
-    def get_target(self, agent: VirxERLU, ball=None):
-        target = None
+    def get_target(agent: VirxERLU, ball: Optional[Vector]=None) -> Vector:
         if ball is None:
-            ball = self.get_ball_loc(agent)
-        self_team = utils.side(agent.team)
+            ball = Retreat.get_ball_loc(agent)
+
+        friends = np.array(tuple(friend.location._np for friend in agent.friends))
+
+        friend_goal = np.array((
+            agent.friend_goal.location._np,
+            agent.friend_goal.left_post._np,
+            agent.friend_goal.right_post._np
+        ))
+
+        return Vector(np_arr=Retreat._get_target(friends, friend_goal, ball._np, agent.team))
+
+    @staticmethod
+    @njit('Array(float32, 1, "C")(Array(float32, 2, "C"), Array(float32, 2, "C"), Array(float32, 1, "C"), float32)', fastmath=True, cache=True)
+    def _get_target(friends: np.ndarray, friend_goal: np.ndarray, ball: np.ndarray, team: int) -> np.ndarray:
+        target = None
+        
+        self_team = utils.side(team)
 
         horizontal_offset = 150
         outside_goal_offset = -125
         inside_goal_offset = 150
 
-        if ball.y < -640:
-            target = agent.friend_goal.location.copy()
-        elif ball.x * self_team < agent.friend_goal.right_post.x * self_team:
-            target = agent.friend_goal.right_post.copy()
+        if ball[1] < -640:
+            target = friend_goal[0].copy()
+        elif ball[0] * self_team < friend_goal[2][0] * self_team:
+            target = friend_goal[2].copy()
 
-            while self.friend_near_target(agent, target):
-                target.x = (target.x * self_team + horizontal_offset * self_team) * self_team
-        elif ball.x * self_team > agent.friend_goal.left_post.x * self_team:
-            target = agent.friend_goal.left_post.copy()
+            while utils.friend_near_target(friends, target):
+                target[0] = (target[0] * self_team + horizontal_offset * self_team) * self_team
+        elif ball[0] * self_team > friend_goal[1][0] * self_team:
+            target = friend_goal[1].copy()
 
-            while self.friend_near_target(agent, target):
-                target.x = (target.x * self_team - horizontal_offset * self_team) * self_team
+            while utils.friend_near_target(friends, target):
+                target[0] = (target[0] * self_team - horizontal_offset * self_team) * self_team
         else:
-            target = agent.friend_goal.location.copy()
-            target.x = ball.x
+            target = friend_goal[0].copy()
+            target[0] = ball[0]
 
-            while self.friend_near_target(agent, target):
-                target.x = (target.x * self_team - horizontal_offset * utils.sign(ball.x) * self_team) * self_team
+            while utils.friend_near_target(friends, target):
+                target[0] = (target[0] * self_team - horizontal_offset * utils.sign(ball[0]) * self_team) * self_team
 
-        target.y += (inside_goal_offset if abs(target.x) < 800 else outside_goal_offset) * utils.side(agent.team)
+        target[1] += (inside_goal_offset if abs(target[0]) < 800 else outside_goal_offset) * self_team
+        target[2] = 0
 
-        return target.flatten()
+        return target
 retreat = Retreat # legacy
 
 
 class Shadow(BaseRoutine):
     def __init__(self):
-        self.goto = goto(Vector(), brake=True)
+        self.goto = GoTo(Vector(), brake=True)
 
     def run(self, agent: VirxERLU):
         ball_loc = self.get_ball_loc(agent, True)
@@ -420,16 +433,18 @@ class Shadow(BaseRoutine):
             self.goto.run(agent)
 
     @staticmethod
-    def switch_to_retreat(agent: VirxERLU, ball: Vector, target: Vector):
+    def switch_to_retreat(agent: VirxERLU, ball: Vector, target: Vector) -> bool:
         return agent.me.location.y * utils.side(agent.team) < ball.y or ball.y > 2560 or target.y * utils.side(agent.team) > 4480
 
-    def is_viable(self, agent: VirxERLU, ignore_distance: bool=False):
-        ball_loc = self.get_ball_loc(agent)
-        target = self.get_target(agent, ball_loc)
+    @staticmethod
+    def is_viable(agent: VirxERLU, ignore_distance: bool=False) -> bool:
+        ball_loc = Shadow.get_ball_loc(agent)
+        target = Shadow.get_target(agent, ball_loc)
 
-        return (ignore_distance or agent.me.location.flat_dist(target) > 320) and not self.switch_to_retreat(agent, ball_loc, target)
+        return (ignore_distance or agent.me.location.flat_dist(target) > 320) and not Shadow.switch_to_retreat(agent, ball_loc, target)
 
-    def get_ball_loc(self, agent: VirxERLU, render: bool=False):
+    @staticmethod
+    def get_ball_loc(agent: VirxERLU, render: bool=False) -> Vector:
         ball_slice = agent.ball.location
         ball_loc = Vector(ball_slice.x, ball_slice.y)
         if render: agent.sphere(ball_loc + Vector(z=agent.ball_radius), agent.ball_radius, color=agent.renderer.black())
@@ -440,9 +455,10 @@ class Shadow(BaseRoutine):
 
         return ball_loc
 
-    def get_target(self, agent: VirxERLU, ball_loc=None):
+    @staticmethod
+    def get_target(agent: VirxERLU, ball_loc: Optional[Vector]=None) -> Vector:
         if ball_loc is None:
-            ball_loc = self.get_ball_loc(agent)
+            ball_loc = Shadow.get_ball_loc(agent)
 
         if len(agent.friends) > 0:
             distance = 3840
@@ -458,7 +474,7 @@ class Shadow(BaseRoutine):
         if target.y * utils.side(agent.team) > -1280:
             # find the proper x coord for us to stop a shot going to the net
             # y = mx + b <- yes, finally! 7th grade math is paying off xD
-            p1 = Retreat().get_target(agent)
+            p1 = Retreat.get_target(agent)
             p2 = ball_loc * Vector(x=1, y=utils.side(agent.team))
             try:
                 m = (p2.y - p1.y) / (p2.x - p1.x)

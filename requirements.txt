@@ -1,5 +1,5 @@
-numpy==1.*
 rlbot==1.*
 scipy==1.*
+numpy==1.21.*
 numba==0.55.*
 VirxERLU-RLib~=0.8.0

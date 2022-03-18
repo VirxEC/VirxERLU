@@ -867,7 +867,7 @@ class Matrix3:
             self._np = np.array(((0, 0, 0), (0, 0, 0), (0, 0, 0)), dtype=np.float32)
             return
         
-        self._np = self._new_matrix(pitch, yaw, roll)
+        self._np = Matrix3._new_matrix(pitch, yaw, roll)
 
     @staticmethod
     @njit('Array(float32, 2, "C")(float32, float32, float32)', fastmath=True, cache=True)
