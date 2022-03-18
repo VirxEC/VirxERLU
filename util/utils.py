@@ -66,7 +66,7 @@ def defaultPD(agent: VirxERLU, local_target: Vector, upside_down: bool=False, up
         math.atan2(up.y, up.z)  # angle required to roll upright
     )
     
-    controller = _get_controller(np.array(target_angles), agent.me.angular_velocity._np)
+    controller = _get_controller(np.array(target_angles, dtype=np.float32), agent.me.angular_velocity._np)
 
     agent.controller.steer = controller[0]
     agent.controller.pitch = controller[1]

@@ -864,7 +864,7 @@ class Matrix3:
         self.roll = roll
 
         if simple:
-            self._np = np.array(((0, 0, 0), (0, 0, 0), (0, 0, 0)))
+            self._np = np.array(((0, 0, 0), (0, 0, 0), (0, 0, 0)), dtype=np.float32)
             return
         
         self._np = self._new_matrix(pitch, yaw, roll)
@@ -884,7 +884,7 @@ class Matrix3:
             (CP*CY, CP*SY, SP),
             (CY*SP*SR-CR*SY, SY*SP*SR+CR*CY, -CP*SR),
             (-CR*CY*SP-SR*SY, -CR*SY*SP+SR*CY, CP*CR)
-        ))
+        ), dtype=np.float32)
 
     @property
     def rotation(self) -> Tuple[Vector, Vector, Vector]:
@@ -923,7 +923,7 @@ class Matrix3:
         right = up.cross(forward).normalize()
 
         # generate the orientation matrix
-        mat._np = np.array((tuple(forward), tuple(right), tuple(up)))
+        mat._np = np.array((tuple(forward), tuple(right), tuple(up)), dtype=np.float32)
         mat.rotation = (forward, right, up)
 
         # generate the pitch/yaw/roll
@@ -952,7 +952,7 @@ class Matrix3:
 class Vector:
     def __init__(self, x: float=0, y: float=0, z: float=0, np_arr: Optional[np.ndarray]=None):
         # this is a private property - this is so all other things treat this class like a list, and so should you!
-        self._np = np.array([x, y, z], dtype=np.float32) if np_arr is None else np_arr
+        self._np = np.array([x, y, z], dtype=np.float32) if np_arr is None else np.float32(np_arr)
 
     def __getitem__(self, index: int):
         return self._np[index].item()
