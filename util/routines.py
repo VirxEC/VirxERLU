@@ -372,7 +372,7 @@ class Retreat(BaseRoutine):
         return Vector(np_arr=Retreat._get_target(friends, friend_goal, ball._np, agent.team))
 
     @staticmethod
-    @njit('Array(float32, 1, "C")(Array(float32, 2, "C"), Array(float32, 2, "C"), Array(float32, 1, "C"), float32)', fastmath=True, cache=True)
+    @njit('Array(float32, 1, "C")(Array(float32, 2, "C"), Array(float32, 2, "C"), Array(float32, 1, "C"), float32)', fastmath=True)
     def _get_target(friends: np.ndarray, friend_goal: np.ndarray, ball: np.ndarray, team: int) -> np.ndarray:
         target = None
         

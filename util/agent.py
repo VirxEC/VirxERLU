@@ -870,7 +870,7 @@ class Matrix3:
         self._np = Matrix3._new_matrix(pitch, yaw, roll)
 
     @staticmethod
-    @njit('Array(float32, 2, "C")(float32, float32, float32)', fastmath=True, cache=True)
+    @njit('Array(float32, 2, "C")(float32, float32, float32)', fastmath=True)
     def _new_matrix(pitch: float, yaw: float, roll: float) -> np.ndarray:
         CP = math.cos(pitch)
         SP = math.sin(pitch)

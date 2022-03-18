@@ -22,7 +22,7 @@ def cap(x, low, high):
     return low if x < low else (high if x > high else x)
 
 
-@njit('float32(float32, float32, float32)', fastmath=True, cache=True)
+@njit('float32(float32, float32, float32)', fastmath=True)
 def _fcap(x: float, low: float, high: float) -> float:
     # caps/clamps a number between a low and high value
     return low if x < low else (high if x > high else x)
@@ -36,13 +36,13 @@ def cap_in_field(agent: VirxERLU, target: Vector) -> Vector:
     return target
 
 
-@njit('float32(float32, float32)', fastmath=True, cache=True)
+@njit('float32(float32, float32)', fastmath=True)
 def steerPD(angle: float, rate: float) -> float:
     # A Proportional-Derivative control loop used for defaultPD
     return _fcap(((35*(angle+rate))**3)/10, -1, 1)
 
 
-@njit('Array(float32, 1, "C")(Array(float32, 1, "C"), Array(float32, 1, "C"))', fastmath=True, cache=True)
+@njit('Array(float32, 1, "C")(Array(float32, 1, "C"), Array(float32, 1, "C"))', fastmath=True)
 def _get_controller(target_angles: np.ndarray, angular_velocity: np.ndarray) -> np.ndarray:
     # Once we have the angles we need to rotate, we feed them into PD loops to determing the controller inputs
     steer = _fcap(3.4 * target_angles[1] + 0.235 * angular_velocity[2], -1, 1)  # Use RLU PID to steer towards target
@@ -105,7 +105,7 @@ def defaultThrottle(agent: VirxERLU, target_speed: float, target_angles: Optiona
     return car_speed
 
 
-@njit('float32(float32)', fastmath=True, cache=True)
+@njit('float32(float32)', fastmath=True)
 def throttle_acceleration(car_velocity_x: float) -> float:
     x = abs(car_velocity_x)
     if x >= 1410:
@@ -119,7 +119,7 @@ def throttle_acceleration(car_velocity_x: float) -> float:
     return -16 * x + 160
 
 
-@njit('Tuple((float32, boolean))(float32, float32, float32, float32, float32, boolean)', fastmath=True, cache=True)
+@njit('Tuple((float32, boolean))(float32, float32, float32, float32, float32, boolean)', fastmath=True)
 def _get_throttle_and_boost(boost_accel: float, target_speed: float, car_speed: float, angle_to_target: float, up_z: float, handbrake: bool) -> Tuple[float, bool]:
     # Thanks to Chip's RLU speed controller for this
     # https://github.com/samuelpmish/RLUtilities/blob/develop/src/mechanics/drive.cc#L182
@@ -183,7 +183,7 @@ def lerp(a, b, t):
     return (b - a) * t + a
 
 
-@njit('float32(float32, float32, float32)', fastmath=True, cache=True)
+@njit('float32(float32, float32, float32)', fastmath=True)
 def _flerp(a: float, b: float, t: float) -> float:
     # Linearly interpolate from a to b using t
     # For instance, when t == 0, a is returned, and when t is 1, b is returned
@@ -198,7 +198,7 @@ def invlerp(a, b, v):
     return (v - a) / (b - a)
 
 
-@njit('float32(float32)', fastmath=True, cache=True)
+@njit('float32(float32)', fastmath=True)
 def curvature_to_velocity(curve: float) -> float:
     curve = _fcap(curve, 0.00088, 0.0069)
     if 0.00088 <= curve <= 0.00110:
@@ -229,7 +229,7 @@ def is_inside_turn_radius(turn_rad: float, local_target: Vector, steer_direction
     return circle.dist(local_target) < turn_rad
 
 
-@njit('float32(float32)', fastmath=True, cache=True)
+@njit('float32(float32)', fastmath=True)
 def curvature(v: float) -> float:
     # v is the magnitude of the velocity in the car's forward direction
     if 0 <= v < 500:
@@ -250,7 +250,7 @@ def curvature(v: float) -> float:
     return 0
 
 
-@njit('float32(float32)', fastmath=True, cache=True)
+@njit('float32(float32)', fastmath=True)
 def turn_radius(v: float) -> float:
     # v is the magnitude of the velocity in the car's forward direction
     if v == 0:
@@ -278,7 +278,7 @@ def find_slope(shot_vector: Vector, car_to_target: Vector) -> float:
     return cap(f, -3, 3)
 
 
-@njit(fastmath=True, cache=True)
+@njit(fastmath=True)
 def quadratic(a: float, b: float, c: float) -> Tuple[Optional[float], Optional[float]]:
     # Returns the two roots of a quadratic
     inside = (b*b) - (4*a*c)
@@ -296,13 +296,13 @@ def quadratic(a: float, b: float, c: float) -> Tuple[Optional[float], Optional[f
     return (b + inside)/a, (b - inside)/a
 
 
-@njit('int32(int32)', fastmath=True, cache=True)
+@njit('int32(int32)', fastmath=True)
 def side(x: int) -> int:  # Literal[-1, 1]:
     # returns -1 for blue team and 1 for orange team
     return (-1, 1)[x]
 
 
-@njit('int32(float32)', fastmath=True, cache=True)
+@njit('int32(float32)', fastmath=True)
 def sign(x: float) -> int:  # Literal[-1, 0, 1]:
     # returns the sign of a number, -1, 0, +1
     if x < 0:
@@ -314,7 +314,7 @@ def sign(x: float) -> int:  # Literal[-1, 0, 1]:
     return 0
 
 
-@njit('boolean(Array(float32, 2, "C"), Array(float32, 1, "C"))', fastmath=True, cache=True)
+@njit('boolean(Array(float32, 2, "C"), Array(float32, 1, "C"))', fastmath=True)
 def friend_near_target(friends: np.ndarray, target: np.ndarray) -> bool:
     for i in range(friends.shape[1]):
         if np.linalg.norm(target - friends[i]) < 400:
@@ -343,7 +343,7 @@ def peek_generator(generator: Generator):
         return
 
 
-@njit('boolean(float32, float32, float32)', fastmath=True, cache=True)
+@njit('boolean(float32, float32, float32)', fastmath=True)
 def almost_equals(x: float, y: float, threshold: float) -> bool:
     return x - threshold < y and y < x + threshold
 
@@ -363,7 +363,7 @@ def point_inside_quadrilateral_2d(point: Vector, quadrilateral: Tuple[Vector, Ve
     return almost_equals(actual_area, quadrilateral_area, 0.001)
 
 
-@njit('boolean(float32, float32)', fastmath=True, cache=True)
+@njit('boolean(float32, float32)', fastmath=True)
 def perimeter_of_ellipse(a: float, b: float) -> bool:
     return math.pi * (3*(a+b) - math.sqrt((3*a + b) * (a + 3*b)))
 
@@ -413,7 +413,7 @@ def ray_intersects_with_circle(origin: Vector, direction: Vector, center: Vector
     return t0 > 0 or t1 > 0
 
 
-@njit('float32(float32, float32)', fastmath=True, cache=True)
+@njit('float32(float32, float32)', fastmath=True)
 def min_non_neg(x: float, y: float) -> float:
     return x if (x < y and x >= 0) or (y < 0 and x >= 0) else y
 
@@ -424,7 +424,7 @@ def min_non_neg(x: float, y: float) -> float:
 # (y - k) / a = (x - h)^2
 # sqrt((y - k) / a) = x - h
 # sqrt((y - k) / a) + h = x
-@njit('float32(float32, float32, float32, float32)', fastmath=True, cache=True)
+@njit('float32(float32, float32, float32, float32)', fastmath=True)
 def vertex_quadratic_solve_for_x_min_non_neg(a: float, h: float, k: float, y: float) -> float:
     if a == 0:
         return 0
@@ -437,14 +437,14 @@ def vertex_quadratic_solve_for_x_min_non_neg(a: float, h: float, k: float, y: fl
     return min_non_neg(v_sqrt + h, -v_sqrt + h)
 
 
-@njit('float32(float32, float32, float32, float32, float32, float32, float32)', fastmath=True, cache=True)
+@njit('float32(float32, float32, float32, float32, float32, float32, float32)', fastmath=True)
 def get_landing_time(fall_distance: float, falling_time_until_terminal_velocity: float, falling_distance_until_terminal_velocity: float, terminal_velocity: float, k: float, h: float, g: float) -> float:
     if fall_distance * sign(-g) <= falling_distance_until_terminal_velocity * sign(-g):
         return vertex_quadratic_solve_for_x_min_non_neg(g, h, k, fall_distance)
     return falling_time_until_terminal_velocity + ((fall_distance - falling_distance_until_terminal_velocity) / terminal_velocity)
 
 
-@njit('Array(float32, 1, "C")(Array(float32, 1, "C"), Array(float32, 1, "C"), float32)', fastmath=True, cache=True)
+@njit('Array(float32, 1, "C")(Array(float32, 1, "C"), Array(float32, 1, "C"), float32)', fastmath=True)
 def _get_ground_times(l: np.ndarray, v: np.ndarray, g: float) -> np.ndarray:
     times = np.array([-1., -1.], dtype=np.float32)
 
