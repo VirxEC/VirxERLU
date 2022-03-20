@@ -361,18 +361,18 @@ class Retreat(BaseRoutine):
         if ball is None:
             ball = Retreat.get_ball_loc(agent)
 
-        friends = np.array(tuple(friend.location._np for friend in agent.friends))
+        friends = np.array(tuple(friend.location._np for friend in agent.friends), dtype=np.float32, ndmin=2)
 
         friend_goal = np.array((
             agent.friend_goal.location._np,
             agent.friend_goal.left_post._np,
             agent.friend_goal.right_post._np
-        ))
+        ), dtype=np.float32)
 
-        return Vector(np_arr=Retreat._get_target(friends, friend_goal, ball._np, agent.team))
+        return Vector(np_arr=Retreat._get_target(friends, friend_goal, ball._np, np.int32(agent.team)))
 
     @staticmethod
-    @njit('Array(float32, 1, "C")(Array(float32, 2, "C"), Array(float32, 2, "C"), Array(float32, 1, "C"), float32)', fastmath=True)
+    @njit('Array(float32, 1, "C")(Array(float32, 2, "C"), Array(float32, 2, "C"), Array(float32, 1, "C"), int32)', fastmath=True)
     def _get_target(friends: np.ndarray, friend_goal: np.ndarray, ball: np.ndarray, team: int) -> np.ndarray:
         target = None
         
