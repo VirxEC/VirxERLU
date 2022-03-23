@@ -494,4 +494,3 @@ def find_landing_plane(l: Vector, v: Vector, g: float) -> int:
         times[5] = t[1]
 
     return times.index(min(item for item in times if item >= 0))
-

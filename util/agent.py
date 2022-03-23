@@ -864,7 +864,7 @@ class Matrix3:
         self.roll = roll
 
         if simple:
-            self._np = np.array(((0, 0, 0), (0, 0, 0), (0, 0, 0)), dtype=np.float32)
+            self._np = np.zeros((3, 3), dtype=np.float32)
             return
         
         self._np = Matrix3._new_matrix(pitch, yaw, roll)
@@ -923,7 +923,7 @@ class Matrix3:
         right = up.cross(forward).normalize()
 
         # generate the orientation matrix
-        mat._np = np.array((tuple(forward), tuple(right), tuple(up)), dtype=np.float32)
+        mat._np = np.array((forward._np, right._np, up._np), dtype=np.float32)
         mat.rotation = (forward, right, up)
 
         # generate the pitch/yaw/roll
