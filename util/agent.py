@@ -112,10 +112,17 @@ class VirxERLU(BaseAgent):
             "heatseeker"
         )
 
-        self.gravity = gravity[mutators.GravityOption()]
-        self.boost_accel = boost_accel[mutators.BoostStrengthOption()]
-        self.boost_amount = boost_amount[mutators.BoostOption()]
-        self.game_mode = game_mode[match_settings.GameMode()]
+        if mutators is None:
+            self.print("WARNING: The state of any mutators is unknown! Assuming there are no physics-changing mutators and the gamemode is soccar on a standard map.")
+            self.gravity = gravity[0]
+            self.boost_accel = boost_accel[0]
+            self.boost_amount = boost_amount[0]
+            self.game_mode = game_mode[0]
+        else:
+            self.gravity = gravity[mutators.GravityOption()]
+            self.boost_accel = boost_accel[mutators.BoostStrengthOption()]
+            self.boost_amount = boost_amount[mutators.BoostOption()]
+            self.game_mode = game_mode[match_settings.GameMode()]
         self.ball_radius = 92.75
 
         self.expected_pads = -1

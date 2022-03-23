@@ -36,13 +36,16 @@ class GroundShot(BaseRoutine):
 
         try:
             shot_info = rlru.get_data_for_shot_with_target(self.target_id)
-        except AssertionError:
+        except IndexError:
+            # Either the target has been removed, never existed, or something else has gone wrong
             agent.pop()
             print_exc()
             return
-        except IndexError:
+        except AssertionError as e:
+            # One of our predictions was incorrect
+            # We could've gotten bumped, the ball bounced weird, or something else
+            agent.print(f"WARNING: {e}")
             agent.pop()
-            print_exc()
             return
         except ValueError:
             # We ran out of time
