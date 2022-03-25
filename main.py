@@ -1,7 +1,7 @@
 from rlbot.utils.structures.quick_chats import QuickChats
 
 from util import routines, tools, utils
-from util.agent import Vector, VirxERLU
+from util.agent import Vector, VirxERLU, run_bot
 
 
 class Bot(VirxERLU):
@@ -170,3 +170,6 @@ class Bot(VirxERLU):
             # Check for "I got it!"
             if quick_chat == QuickChats.Information_IGotIt:
                 self.print(f"Ignoring 'I got it!' from {self.all[index].name} :)")
+
+if __name__ == "__main__":
+    run_bot(Bot)

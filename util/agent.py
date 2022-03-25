@@ -12,7 +12,8 @@ from typing import Optional, Tuple
 import numpy as np
 import virx_erlu_rlib as rlru
 from numba import njit
-from rlbot.agents.base_agent import BaseAgent, SimpleControllerState
+from rlbot.agents.base_agent import SimpleControllerState
+from rlbot.agents.standalone.standalone_bot import StandaloneBot, run_bot
 from rlbot.utils.rendering.rendering_manager import Color
 from rlbot.utils.structures.game_data_struct import (GameTickPacket, Rotator,
                                                      Vector3)
@@ -29,7 +30,7 @@ if not TOURNAMENT_MODE and EXTRA_DEBUGGING:
     from gui import Gui
 
 
-class VirxERLU(BaseAgent):
+class VirxERLU(StandaloneBot):
     # Massive thanks to ddthj/GoslingAgent (GitHub repo) for the basis of VirxERLU
     # VirxERLU on VirxEC Showcase -> https://virxerlu.virxcase.dev/
     # Wiki -> https://github.com/VirxEC/VirxERLU/wiki
