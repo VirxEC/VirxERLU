@@ -132,7 +132,7 @@ def find_shot(agent: VirxERLU, target: Tuple[Vector, Vector], cap_: int=6, can_a
 
 
 def get_slices(agent: VirxERLU, cap_: int) -> Optional[Tuple[int, int]]:
-    start_slice = 6
+    start_slice = 0
     end_slices = None
 
     # If we're shooting, crop the struct
@@ -144,11 +144,11 @@ def get_slices(agent: VirxERLU, cap_: int) -> Optional[Tuple[int, int]]:
         if time_remaining > 0:
             # Convert the time remaining into number of slices, and take off the minimum gain accepted from the time
             min_gain = 0.2
-            end_slice = round(min(time_remaining - min_gain, cap_) * 60)
+            end_slice = round(min(time_remaining - min_gain, cap_) * 120)
 
     if end_slices is None:
         # Cap the slices
-        end_slice = round(cap_ * 60)
+        end_slice = round(cap_ * 120)
 
     # We can't end a slice index that's lower than the start index
     if end_slice <= start_slice:

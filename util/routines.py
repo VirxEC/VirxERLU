@@ -16,8 +16,11 @@ class GroundShot(BaseRoutine):
     def __init__(self, intercept_time: float, target_id: int):
         self.intercept_time = intercept_time
         self.target_id = target_id
+        self.end_next_tick = False
 
     def update(self, shot: GroundShot):
+        if self.intercept_time < shot.intercept_time + 0.1:
+            return
         try:
             rlru.confirm_target(shot.target_id)
         except Exception:
@@ -26,20 +29,31 @@ class GroundShot(BaseRoutine):
         rlru.remove_target(self.target_id)
         self.intercept_time = shot.intercept_time
         self.target_id = shot.target_id
+        self.end_next_tick = False
 
     def run(self, agent: VirxERLU):
+        if self.end_next_tick:
+            agent.pop()
+            return
+
+        if agent.me.airborne:
+            agent.push(Recovery())
+            return
+
         future_ball_location = Vector(*rlru.get_slice(self.intercept_time).location)
 
-        agent.point(future_ball_location, agent.renderer.purple())
+        agent.sphere(future_ball_location, agent.ball_radius, agent.renderer.purple())
 
         T = self.intercept_time - agent.time
+
+        agent.dbg_3d(f"Time to intercept: {round(T, 1)}")
 
         try:
             shot_info = rlru.get_data_for_shot_with_target(self.target_id)
         except IndexError:
             # Either the target has been removed, never existed, or something else has gone wrong
+            agent.print(f"WARNING: {e}")
             agent.pop()
-            print_exc()
             return
         except AssertionError as e:
             # One of our predictions was incorrect
@@ -48,7 +62,7 @@ class GroundShot(BaseRoutine):
             agent.pop()
             return
         except ValueError:
-            # We ran out of time
+            agent.print(f"WARNING: We ran out of time to execute the shot")
             agent.pop()
             return
 
@@ -65,6 +79,12 @@ class GroundShot(BaseRoutine):
         local_final_target = agent.me.local_location(final_target.flatten())
 
         utils.defaultDrive(agent, speed_required, local_final_target)
+
+        flip_time = utils._fcap(320. / speed_required - 0.05, 0.1, 0.25)
+        if flip_time - 0.05 < T < flip_time:
+            flip_dir = agent.me.local_location(future_ball_location + Vector(shot_info.shot_vector[0], shot_info.shot_vector[1]) * agent.ball_radius)
+            self.end_next_tick = True
+            agent.push(Flip(flip_dir))
 
     def on_push(self):
         rlru.confirm_target(self.target_id)
@@ -440,11 +460,11 @@ class Shadow(BaseRoutine):
         return agent.me.location.y * utils.side(agent.team) < ball.y or ball.y > 2560 or target.y * utils.side(agent.team) > 4480
 
     @staticmethod
-    def is_viable(agent: VirxERLU, ignore_distance: bool=False) -> bool:
+    def is_viable(agent: VirxERLU, ignore_distance: bool=False, ignore_retreat=False) -> bool:
         ball_loc = Shadow.get_ball_loc(agent)
         target = Shadow.get_target(agent, ball_loc)
 
-        return (ignore_distance or agent.me.location.flat_dist(target) > 320) and not Shadow.switch_to_retreat(agent, ball_loc, target)
+        return (ignore_distance or agent.me.location.flat_dist(target) > 320) and (ignore_retreat or not Shadow.switch_to_retreat(agent, ball_loc, target))
 
     @staticmethod
     def get_ball_loc(agent: VirxERLU, render: bool=False) -> Vector:

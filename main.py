@@ -127,7 +127,7 @@ class Bot(VirxERLU):
             else:
                 shadow = routines.Shadow()
                 # Check if the shadow routine is viable
-                if shadow.is_viable(self):
+                if shadow.is_viable(self, ignore_retreat=True):
                     # Shadow
                     self.push(shadow)
 
