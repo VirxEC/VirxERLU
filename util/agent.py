@@ -359,7 +359,7 @@ class VirxERLU(StandaloneBot):
 
     def is_shooting(self) -> bool:
         stack_routine_name = '' if self.is_clear() else self.stack[0].__class__.__name__
-        return stack_routine_name in {'Aerial', 'jump_shot', 'double_jump', 'ground_shot', 'short_shot'}
+        return stack_routine_name in {'Aerial', 'DoubleJumpShot', 'JumpShot', 'GroundShot', 'double_jump', 'jump_shot', 'ground_shot', 'short_shot'}
 
     def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
         try:

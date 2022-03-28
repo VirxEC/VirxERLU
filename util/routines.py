@@ -94,6 +94,88 @@ class GroundShot(BaseRoutine):
 ground_shot = GroundShot  # legacy
 
 
+class JumpShot(BaseRoutine):
+    def __init__(self, intercept_time: float, target_id: int):
+        self.intercept_time = intercept_time
+        self.target_id = target_id
+        self.end_next_tick = False
+
+    def update(self, shot: JumpShot):
+        if self.intercept_time < shot.intercept_time + 0.1:
+            return
+        try:
+            rlru.confirm_target(shot.target_id)
+        except Exception:
+            print_exc()
+            return
+        rlru.remove_target(self.target_id)
+        self.intercept_time = shot.intercept_time
+        self.target_id = shot.target_id
+        self.end_next_tick = False
+
+    def run(self, agent: VirxERLU):
+        if self.end_next_tick:
+            agent.pop()
+            return
+
+        if agent.me.airborne:
+            agent.push(Recovery())
+            return
+
+        future_ball_location = Vector(*rlru.get_slice(self.intercept_time).location)
+
+        agent.sphere(future_ball_location, agent.ball_radius, agent.renderer.purple())
+
+        T = self.intercept_time - agent.time
+
+        agent.dbg_3d(f"Time to intercept: {round(T, 1)}")
+
+        try:
+            shot_info = rlru.get_data_for_shot_with_target(self.target_id)
+        except IndexError:
+            # Either the target has been removed, never existed, or something else has gone wrong
+            agent.print(f"WARNING: {e}")
+            agent.pop()
+            return
+        except AssertionError as e:
+            # One of our predictions was incorrect
+            # We could've gotten bumped, the ball bounced weird, or something else
+            agent.print(f"WARNING: {e}")
+            agent.pop()
+            return
+        except ValueError:
+            agent.print(f"WARNING: We ran out of time to execute the shot")
+            agent.pop()
+            return
+
+        final_target = Vector(*shot_info.final_target)
+        agent.point(final_target, agent.renderer.red())
+
+        if len(shot_info.path_samples) > 2:
+            agent.polyline(tuple(Vector(sample[0], sample[1], 30) for sample in shot_info.path_samples), agent.renderer.lime())
+        else:
+            agent.line(agent.me.location, final_target, agent.renderer.lime())
+
+        distance_remaining = shot_info.distance_remaining
+        speed_required = min(distance_remaining / T, 2300)
+        local_final_target = agent.me.local_location(final_target.flatten())
+
+        utils.defaultDrive(agent, speed_required, local_final_target)
+
+        flip_time = utils._fcap(320. / speed_required - 0.05, 0.1, 0.25)
+        if flip_time - 0.05 < T < flip_time:
+            flip_dir = agent.me.local_location(future_ball_location + Vector(shot_info.shot_vector[0], shot_info.shot_vector[1]) * agent.ball_radius)
+            self.end_next_tick = True
+            agent.push(Flip(flip_dir))
+
+    def on_push(self):
+        rlru.confirm_target(self.target_id)
+
+    def pre_pop(self):
+        rlru.remove_target(self.target_id)
+jump_shot = JumpShot  # legacy
+
+
 class Recovery(BaseRoutine):
     # Point towards our velocity vector and land upright, unless we aren't moving very fast
     # A vector can be provided to control where the car points when it lands

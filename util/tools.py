@@ -3,12 +3,12 @@ from typing import Optional, Tuple
 import virx_erlu_rlib as rlru
 
 from util.agent import VirxERLU
-from util.routines import GroundShot
+from util.routines import GroundShot, JumpShot
 from util.utils import Vector
 
 SHOT_SWITCH = {
     rlru.ShotType.GROUND: GroundShot,
-    # ShotType.JUMP: jump_shot,
+    rlru.ShotType.JUMP: JumpShot,
     # ShotType.DOUBLE_JUMP: double_jump
 }
 
