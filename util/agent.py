@@ -149,20 +149,20 @@ class VirxERLU(StandaloneBot):
             self.print("VirxERLU-RLib does not support this game mode: " + self.game_mode + "; Defaulting to soccer")
             rlru.load_soccer()
 
-        self.all: list[car_object] = ()
-        self.friends: list[car_object] = ()
-        self.foes: list[car_object] = ()
-        self.me = car_object(self.index)
+        self.all: list[Car] = ()
+        self.friends: list[Car] = ()
+        self.foes: list[Car] = ()
+        self.me = Car(self.index)
 
         self.ball_to_goal = -1
 
-        self.ball = ball_object()
-        self.game = game_object()
+        self.ball = Ball()
+        self.game = Game()
 
-        self.boosts: list[boost_object] = ()
+        self.boosts: list[BoostPad] = ()
 
-        self.friend_goal = goal_object(self.team)
-        self.foe_goal = goal_object(not self.team)
+        self.friend_goal = Goal(self.team)
+        self.foe_goal = Goal(not self.team)
 
         self.stack: list[BaseRoutine] = []
         self.time = 0
@@ -195,7 +195,7 @@ class VirxERLU(StandaloneBot):
 
     def get_ready(self, packet: GameTickPacket):
         field_info = self.get_field_info()
-        self.boosts = tuple(boost_object(i, field_info.boost_pads[i].location, field_info.boost_pads[i].is_full_boost) for i in range(field_info.num_boosts))
+        self.boosts = tuple(BoostPad(i, field_info.boost_pads[i].location, field_info.boost_pads[i].is_full_boost) for i in range(field_info.num_boosts))
         if self.expected_pads != -1 and len(self.boosts) != self.expected_pads:
             print(f"There are {len(self.boosts)} boost pads instead of {self.expected_pads}! @Tarehart REEEEE!")
             for i, boost in enumerate(self.boosts):
@@ -219,7 +219,7 @@ class VirxERLU(StandaloneBot):
 
     def refresh_player_lists(self, packet: GameTickPacket):
         # Useful to keep separate from get_ready because humans can join/leave a match
-        self.all = tuple(car_object(i, packet) for i in range(packet.num_cars))
+        self.all = tuple(Car(i, packet) for i in range(packet.num_cars))
         self.update_cars_from_all()
 
     def push(self, routine: BaseRoutine):
@@ -594,7 +594,7 @@ class BaseRoutine:
         pass
 
 
-class car_object:
+class Car:
     # objects convert the gametickpacket in something a little friendlier to use
     # and are automatically updated by VirxERLU as the game runs
     def __init__(self, index: int, packet: Optional[GameTickPacket]=None):
@@ -620,7 +620,7 @@ class car_object:
             self.name = car.name
             if self.true_name is None: self.true_name = re.split(r' \(\d+\)$', self.name)[0]  # e.x. 'ABot (12)' will instead be just 'ABot'
             self.team = car.team
-            self.hitbox = hitbox_object(car.hitbox.length, car.hitbox.width, car.hitbox.height, Vector(car.hitbox_offset.x, car.hitbox_offset.y, car.hitbox_offset.z))
+            self.hitbox = Hitbox(car.hitbox.length, car.hitbox.width, car.hitbox.height, Vector(car.hitbox_offset.x, car.hitbox_offset.y, car.hitbox_offset.z))
 
             self.update(packet)
 
@@ -629,7 +629,7 @@ class car_object:
         self.name = None
         self.true_name = None
         self.team = -1
-        self.hitbox = hitbox_object()
+        self.hitbox = Hitbox()
 
     def local(self, value: Vector) -> Vector:
         # Generic localization
@@ -716,9 +716,10 @@ class car_object:
     def up(self) -> Vector:
         # A vector pointing up relative to the cars orientation. Its magnitude == 1
         return self.orientation.up
+car_object = Car  # legacy
 
 
-class hitbox_object:
+class Hitbox:
     def __init__(self, length: float=0, width: float=0, height: float=0, offset=None):
         self.length = length
         self.width = width
@@ -742,26 +743,29 @@ class hitbox_object:
 
     # repr(self)
     def __repr__(self):
-        return f"hitbox_object(length={self.length}, width={self.width}, height={self.height})"
+        return f"Hitbox(length={self.length}, width={self.width}, height={self.height})"
 
     # round(self)
-    def __round__(self, decimals: int=0) -> hitbox_object:
+    def __round__(self, decimals: int=0) -> Hitbox:
         # Rounds all of the values
-        return hitbox_object(*(round(euler_angle) for euler_angle in self))
+        return Hitbox(*(round(euler_angle) for euler_angle in self))
+hitbox_object = Hitbox  # legacy
 
 
-class hitbox_sphere:
+class HitboxSphere:
     def __init__(self, diameter: float=185.5):
         self.diameter = diameter
+hitbox_sphere = HitboxSphere  # legacy
 
 
-class hitbox_cylinder:
+class HitboxCylinder:
     def __init__(self, diameter: float=185.5, height: float=185.5):
         self.diameter = diameter
         self.height = height
+hitbox_cylinder = HitboxCylinder  # legacy
 
 
-class last_touch:
+class LastTouch:
     def __init__(self):
         self.location = Vector()
         self.normal = Vector()
@@ -773,10 +777,11 @@ class last_touch:
         self.location = Vector.from_vector(touch.hit_location)
         self.normal = Vector.from_vector(touch.hit_normal)
         self.time = touch.time_seconds
-        self.car = car_object(touch.player_index, packet)
+        self.car = Car(touch.player_index, packet)
+last_touch = LastTouch  # legacy
 
 
-class ball_shape:
+class BallShape:
     def __init__(self):
         self.type = -1
         self.hitbox = None
@@ -786,19 +791,20 @@ class ball_shape:
         self.type = shape.type
 
         if self.type == 0:
-            self.hitbox = hitbox_object(shape.box.length, shape.box.width, shape.box.height)
+            self.hitbox = Hitbox(shape.box.length, shape.box.width, shape.box.height)
         elif self.type == 1:
-            self.hitbox = hitbox_sphere(shape.sphere.diameter)
+            self.hitbox = HitboxSphere(shape.sphere.diameter)
         elif self.type == 2:
-            self.hitbox = hitbox_cylinder(shape.cylinder.diameter, shape.cylinder.height)
+            self.hitbox = HitboxCylinder(shape.cylinder.diameter, shape.cylinder.height)
+ball_shape = BallShape  # legacy
 
 
-class ball_object:
+class Ball:
     def __init__(self):
         self.location = Vector()
         self.velocity = Vector()
-        self.last_touch = last_touch()
-        self.shape = ball_shape()
+        self.last_touch = LastTouch()
+        self.shape = BallShape()
 
     def update(self, packet: GameTickPacket):
         ball = packet.game_ball
@@ -806,9 +812,10 @@ class ball_object:
         self.velocity = Vector.from_vector(ball.physics.velocity)
         self.last_touch.update(packet)
         self.shape.update(packet)
+ball_object = Ball
 
 
-class boost_object:
+class BoostPad:
     def __init__(self, index: int, location: Vector, large: bool):
         self.index = index
         self.location = Vector.from_vector(location)
@@ -817,9 +824,10 @@ class boost_object:
 
     def update(self, packet: GameTickPacket):
         self.active = packet.game_boosts[self.index].is_active
+boost_object = BoostPad  # legacy
 
 
-class goal_object:
+class Goal:
     # This is a simple object that creates/holds goalpost locations for a given team (for soccer on standard maps only)
     def __init__(self, team: int):
         team = 1 if team == 1 else -1
@@ -827,9 +835,10 @@ class goal_object:
         # Posts are closer to x=893, but this allows the bot to be a little more accurate
         self.left_post = Vector(team * 800, team * 5120, 321.3875)
         self.right_post = Vector(-team * 800, team * 5120, 321.3875)
+goal_object = Goal  # legacy
 
 
-class game_object:
+class Game:
     # This object holds information about the current match
     def __init__(self):
         self.time = 0
@@ -853,6 +862,7 @@ class game_object:
         self.friend_score = packet.teams[team].score
         self.foe_score = packet.teams[not team].score
         self.gravity.z = game.world_gravity_z
+game_object = Game  # legacy
 
 
 class Matrix3:

@@ -9,7 +9,7 @@ import virx_erlu_rlib as rlru
 from numba import njit
 
 from util import utils
-from util.agent import BaseRoutine, Vector, VirxERLU, boost_object
+from util.agent import BaseRoutine, Vector, VirxERLU, BoostPad
 
 
 class GroundShot(BaseRoutine):
@@ -360,7 +360,7 @@ goto = GoTo # legacy
 
 class GoToBoost(BaseRoutine):
     # very similar to goto() but designed for grabbing boost
-    def __init__(self, boost: boost_object):
+    def __init__(self, boost: BoostPad):
         self.boost = boost
         self.goto = GoTo(self.boost.location, slow=not self.boost.large)
 
