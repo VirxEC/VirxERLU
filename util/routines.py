@@ -104,8 +104,9 @@ class JumpShot(BaseRoutine):
         self.target_id = target_id
         self.jumping = False
         self.jump_time = -1
-        self.last_jump = False
+        self.last_jump = None
         self.dodge_params = None
+        self.recovering = False
 
     def update(self, shot: JumpShot):
         if self.intercept_time < shot.intercept_time + 0.1 or self.jumping:
@@ -123,22 +124,28 @@ class JumpShot(BaseRoutine):
         self.target_id = shot.target_id
 
     def run(self, agent: VirxERLU):
+        T = self.intercept_time - agent.time
+        agent.dbg_3d(f"Time to intercept: {round(T, 1)}")
+
+        if self.recovering:
+            if T >= -0.25:
+                agent.controller.yaw = self.dodge_params[0]
+                agent.controller.pitch = self.dodge_params[1]
+            else:
+                agent.pop()
+                agent.push(Recovery())
+            return
+
         if agent.me.airborne and not self.jumping:
             agent.push(Recovery())
             return
 
         future_ball_location = Vector(*rlru.get_slice(self.intercept_time).location)
-
         agent.sphere(future_ball_location, agent.ball_radius, agent.renderer.purple())
 
-        T = self.intercept_time - agent.time
-
         if T <= 0.1 and self.jumping and self.dodge_params is not None and agent.ball.last_touch.car.index == agent.me.index and abs(self.intercept_time - agent.ball.last_touch.time) < 0.1:
-            agent.pop()
-            agent.push(Recovery())
+            self.recovering = True
             return
-
-        agent.dbg_3d(f"Time to intercept: {round(T, 1)}")
 
         try:
             shot_info = rlru.get_data_for_shot_with_target(self.target_id)
@@ -161,6 +168,9 @@ class JumpShot(BaseRoutine):
         final_target = Vector(*shot_info.final_target)
         agent.point(final_target, agent.renderer.red())
 
+        shot_vector = Vector(*shot_info.shot_vector)
+        agent.line(future_ball_location + shot_vector * agent.ball_radius, future_ball_location + shot_vector * agent.ball_radius * 3, agent.renderer.lime())
+
         if len(shot_info.path_samples) > 2:
             agent.polyline(tuple(Vector(sample[0], sample[1], 30) for sample in shot_info.path_samples), agent.renderer.lime())
         else:
@@ -170,7 +180,8 @@ class JumpShot(BaseRoutine):
         speed_required = min(distance_remaining / T, 2300)
         local_final_target = agent.me.local_location(Vector(final_target.x, final_target.y, agent.me.location.z))
 
-        if shot_info.required_jump_time is not None and shot_info.required_jump_time < T:
+        agent.dbg_2d(f"Required jump time: {round(shot_info.required_jump_time, 1)}")
+        if T < shot_info.required_jump_time:
             self.jumping = True
 
         if not self.jumping:
@@ -182,14 +193,11 @@ class JumpShot(BaseRoutine):
 
         if agent.time - self.jump_time < MAX_JUMP_HOLD_TIME:
             agent.controller.jump = True
-            self.last_jump = True
             utils.defaultPD(agent, local_final_target)
-        else:
-            self.last_jump = False
 
         if T < 0.1:
             if self.dodge_params is None:
-                flip_dir = agent.me.local_location(future_ball_location + Vector(shot_info.shot_vector[0], shot_info.shot_vector[1]) * agent.ball_radius)
+                flip_dir = agent.me.local_location(future_ball_location + shot_vector * agent.ball_radius)
                 target_angle = math.atan2(flip_dir.y, flip_dir.x)
                 yaw = math.sin(target_angle)
                 neg_pitch = math.cos(target_angle)  # negative pitch is down which flips us forward, so cosine and pitch are inversly related
@@ -203,7 +211,10 @@ class JumpShot(BaseRoutine):
             agent.controller.pitch = self.dodge_params[1]
             agent.controller.throttle = self.dodge_params[2]
 
-            if self.last_jump:
+            if self.last_jump is None:
+                self.last_jump = agent.time
+
+            if agent.time - self.last_jump < 0.05:
                 agent.controller.jump = False
                 self.last_jump = False
             else:
