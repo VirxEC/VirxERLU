@@ -161,17 +161,17 @@ def defaultThrottle(agent: VirxERLU, target_speed: float, target_angles: Optiona
         turn_rad = turn_radius(abs(car_speed))
         agent.controller.handbrake = not agent.me.airborne and agent.me.velocity.magnitude() > 600 and (is_inside_turn_radius(turn_rad, local_target, _fsign(agent.controller.steer)) if abs(local_target.y) < turn_rad or car_speed > 1410 else abs(local_target.x) < turn_rad)
 
-    angle_to_target = abs(target_angles[1])
+        angle_to_target = abs(target_angles[1])
 
-    if target_speed < 0:
-        angle_to_target = math.pi - angle_to_target
+        if target_speed < 0:
+            angle_to_target = math.pi - angle_to_target
 
-    if agent.controller.handbrake:
-        if angle_to_target > 2.6:
-            agent.controller.steer = _fsign(agent.controller.steer)
-            agent.controller.handbrake = False
-        else:
-            agent.controller.steer = agent.controller.yaw
+        if agent.controller.handbrake:
+            if angle_to_target > 2.6:
+                agent.controller.steer = _fsign(agent.controller.steer)
+                agent.controller.handbrake = False
+            else:
+                agent.controller.steer = agent.controller.yaw
 
     (throttle, boost) = _get_throttle_and_boost(agent.boost_accel, target_speed, car_speed, angle_to_target, agent.me.up.z, agent.controller.handbrake)
     agent.controller.throttle = throttle

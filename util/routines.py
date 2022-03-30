@@ -133,6 +133,11 @@ class JumpShot(BaseRoutine):
 
         T = self.intercept_time - agent.time
 
+        if T <= 0.1 and self.jumping and self.dodge_params is not None and agent.ball.last_touch.car.index == agent.me.index and abs(self.intercept_time - agent.ball.last_touch.time) < 0.1:
+            agent.pop()
+            agent.push(Recovery())
+            return
+
         agent.dbg_3d(f"Time to intercept: {round(T, 1)}")
 
         try:
@@ -153,9 +158,6 @@ class JumpShot(BaseRoutine):
             agent.pop()
             return
 
-        if shot_info.required_jump_time is not None and shot_info.required_jump_time < T:
-            self.jumping = True
-
         final_target = Vector(*shot_info.final_target)
         agent.point(final_target, agent.renderer.red())
 
@@ -168,11 +170,14 @@ class JumpShot(BaseRoutine):
         speed_required = min(distance_remaining / T, 2300)
         local_final_target = agent.me.local_location(Vector(final_target.x, final_target.y, agent.me.location.z))
 
+        if shot_info.required_jump_time is not None and shot_info.required_jump_time < T:
+            self.jumping = True
+
         if not self.jumping:
             utils.defaultDrive(agent, speed_required, local_final_target)
             return
 
-        if not agent.car.airbourne:
+        if not agent.me.airborne:
             self.jump_time = agent.time
 
         if agent.time - self.jump_time < MAX_JUMP_HOLD_TIME:
@@ -203,7 +208,7 @@ class JumpShot(BaseRoutine):
                 self.last_jump = False
             else:
                 agent.controller.jump = True
-        else:
+        elif agent.me.airborne:
             utils.defaultThrottle(agent, speed_required)
 
     def on_push(self):
