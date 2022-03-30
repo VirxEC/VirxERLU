@@ -16,6 +16,8 @@ BRAKE_COAST_TRANSITION = -(0.45 * BRAKE_ACC + 0.55 * COAST_ACC)
 COASTING_THROTTLE_TRANSITION = -0.5 * COAST_ACC
 MIN_WALL_SPEED = -0.5 * BRAKE_ACC
 
+AIR_THROTTLE_ACCEL = 66 + (2/3)
+
 
 def cap(x, low, high):
     # caps/clamps a number between a low and high value
@@ -75,34 +77,14 @@ def defaultPD(agent: VirxERLU, local_target: Vector, upside_down: bool=False, up
 
     return target_angles
 
-def defaultThrottle(agent: VirxERLU, target_speed: float, target_angles: Optional[Tuple[float, float, float]]=None, local_target: Optional[Vector]=None) -> float:
-    # accelerates the car to a desired speed using throttle and boost
-    car_speed = agent.me.forward.dot(agent.me.velocity)
 
-    if agent.me.airborne:
-        return car_speed
-
-    if target_angles is not None and local_target is not None:
-        turn_rad = turn_radius(abs(car_speed))
-        agent.controller.handbrake = not agent.me.airborne and agent.me.velocity.magnitude() > 600 and (is_inside_turn_radius(turn_rad, local_target, sign(agent.controller.steer)) if abs(local_target.y) < turn_rad or car_speed > 1410 else abs(local_target.x) < turn_rad)
-
-    angle_to_target = abs(target_angles[1])
-
-    if target_speed < 0:
-        angle_to_target = math.pi - angle_to_target
-
-    if agent.controller.handbrake:
-        if angle_to_target > 2.6:
-            agent.controller.steer = sign(agent.controller.steer)
-            agent.controller.handbrake = False
-        else:
-            agent.controller.steer = agent.controller.yaw
-
-    (throttle, boost) = _get_throttle_and_boost(agent.boost_accel, target_speed, car_speed, angle_to_target, agent.me.up.z, agent.controller.handbrake)
-    agent.controller.throttle = throttle
-    agent.controller.boost = boost
-
-    return car_speed
+@njit('Tuple((float32, boolean))(float32, float32, float32, float32)', fastmath=True)
+def _get_air_throttle_and_boost(delta_time: float, boost_accel: float, target_speed: float, car_speed: float) -> Tuple[float, bool]:
+    t = target_speed - car_speed
+    if t >= boost_accel * delta_time * 3 + AIR_THROTTLE_ACCEL * delta_time:
+        return (1, True)
+    else:
+        return (_fcap(t / (AIR_THROTTLE_ACCEL * delta_time), -1, 1), False)
 
 
 @njit('float32(float32)', fastmath=True)
@@ -162,6 +144,40 @@ def _get_throttle_and_boost(boost_accel: float, target_speed: float, car_speed: 
         throttle *= -1  # earlier we flipped the sign of the acceleration, so we have to flip the sign of the throttle for it to be correct
 
     return throttle, boost
+
+
+def defaultThrottle(agent: VirxERLU, target_speed: float, target_angles: Optional[Tuple[float, float, float]]=None, local_target: Optional[Vector]=None) -> float:
+    # accelerates the car to a desired speed using throttle and boost
+    car_speed = agent.me._local_velocity.x
+
+    if agent.me.airborne:
+        (throttle, boost) = _get_air_throttle_and_boost(agent.delta_time, agent.boost_accel, target_speed, car_speed)
+        agent.controller.throttle = throttle
+        agent.controller.boost = boost
+
+        return car_speed
+
+    if target_angles is not None and local_target is not None:
+        turn_rad = turn_radius(abs(car_speed))
+        agent.controller.handbrake = not agent.me.airborne and agent.me.velocity.magnitude() > 600 and (is_inside_turn_radius(turn_rad, local_target, _fsign(agent.controller.steer)) if abs(local_target.y) < turn_rad or car_speed > 1410 else abs(local_target.x) < turn_rad)
+
+    angle_to_target = abs(target_angles[1])
+
+    if target_speed < 0:
+        angle_to_target = math.pi - angle_to_target
+
+    if agent.controller.handbrake:
+        if angle_to_target > 2.6:
+            agent.controller.steer = _fsign(agent.controller.steer)
+            agent.controller.handbrake = False
+        else:
+            agent.controller.steer = agent.controller.yaw
+
+    (throttle, boost) = _get_throttle_and_boost(agent.boost_accel, target_speed, car_speed, angle_to_target, agent.me.up.z, agent.controller.handbrake)
+    agent.controller.throttle = throttle
+    agent.controller.boost = boost
+
+    return car_speed
 
 
 def defaultDrive(agent: VirxERLU, target_speed: float, local_target: Vector) -> Tuple[Tuple[Vector, Vector, Vector], float]:
@@ -274,7 +290,7 @@ def find_slope(shot_vector: Vector, car_to_target: Vector) -> float:
     try:
         f = d / e
     except ZeroDivisionError:
-        return 10*sign(d)
+        return 10*_fsign(d)
     return cap(f, -3, 3)
 
 
@@ -302,8 +318,19 @@ def side(x: int) -> int:  # Literal[-1, 1]:
     return (-1, 1)[x]
 
 
-@njit('int32(float32)', fastmath=True)
 def sign(x: float) -> int:  # Literal[-1, 0, 1]:
+    # returns the sign of a number, -1, 0, +1
+    if x < 0:
+        return -1
+
+    if x > 0:
+        return 1
+
+    return 0
+
+
+@njit('int32(float32)', fastmath=True)
+def _fsign(x: float) -> int:  # Literal[-1, 0, 1]:
     # returns the sign of a number, -1, 0, +1
     if x < 0:
         return -1
@@ -439,7 +466,7 @@ def vertex_quadratic_solve_for_x_min_non_neg(a: float, h: float, k: float, y: fl
 
 @njit('float32(float32, float32, float32, float32, float32, float32, float32)', fastmath=True)
 def get_landing_time(fall_distance: float, falling_time_until_terminal_velocity: float, falling_distance_until_terminal_velocity: float, terminal_velocity: float, k: float, h: float, g: float) -> float:
-    if fall_distance * sign(-g) <= falling_distance_until_terminal_velocity * sign(-g):
+    if fall_distance * _fsign(-g) <= falling_distance_until_terminal_velocity * _fsign(-g):
         return vertex_quadratic_solve_for_x_min_non_neg(g, h, k, fall_distance)
     return falling_time_until_terminal_velocity + ((fall_distance - falling_distance_until_terminal_velocity) / terminal_velocity)
 

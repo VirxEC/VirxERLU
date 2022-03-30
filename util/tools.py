@@ -64,7 +64,7 @@ def find_shot(agent: VirxERLU, target: Tuple[Vector, Vector], cap_: int=6, can_a
     target_id = rlru.new_target(tuple(target[0]), tuple(target[1]), agent.me.index, options)
 
     # Search for the shot
-    shot = rlru.get_shot_with_target(target_id, may_ground_shot=can_ground, only=True)
+    shot = rlru.get_shot_with_target(target_id, may_ground_shot=can_ground, may_jump_shot=can_jump, only=True)
 
     if shot.found:
         return SHOT_SWITCH[shot.shot_type](shot.time, target_id)

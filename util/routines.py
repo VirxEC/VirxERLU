@@ -11,6 +11,7 @@ from numba import njit
 from util import utils
 from util.agent import BaseRoutine, Vector, VirxERLU, BoostPad
 
+MAX_JUMP_HOLD_TIME = 0.2
 
 class GroundShot(BaseRoutine):
     def __init__(self, intercept_time: float, target_id: int):
@@ -21,12 +22,15 @@ class GroundShot(BaseRoutine):
     def update(self, shot: GroundShot):
         if self.intercept_time < shot.intercept_time + 0.1:
             return
+
         try:
             rlru.confirm_target(shot.target_id)
         except Exception:
             print_exc()
             return
+
         rlru.remove_target(self.target_id)
+
         self.intercept_time = shot.intercept_time
         self.target_id = shot.target_id
         self.end_next_tick = False
@@ -98,27 +102,28 @@ class JumpShot(BaseRoutine):
     def __init__(self, intercept_time: float, target_id: int):
         self.intercept_time = intercept_time
         self.target_id = target_id
-        self.end_next_tick = False
+        self.jumping = False
+        self.jump_time = -1
+        self.last_jump = False
+        self.dodge_params = None
 
     def update(self, shot: JumpShot):
-        if self.intercept_time < shot.intercept_time + 0.1:
+        if self.intercept_time < shot.intercept_time + 0.1 or self.jumping:
             return
+
         try:
             rlru.confirm_target(shot.target_id)
         except Exception:
             print_exc()
             return
+
         rlru.remove_target(self.target_id)
+
         self.intercept_time = shot.intercept_time
         self.target_id = shot.target_id
-        self.end_next_tick = False
 
     def run(self, agent: VirxERLU):
-        if self.end_next_tick:
-            agent.pop()
-            return
-
-        if agent.me.airborne:
+        if agent.me.airborne and not self.jumping:
             agent.push(Recovery())
             return
 
@@ -148,6 +153,9 @@ class JumpShot(BaseRoutine):
             agent.pop()
             return
 
+        if shot_info.required_jump_time is not None and shot_info.required_jump_time < T:
+            self.jumping = True
+
         final_target = Vector(*shot_info.final_target)
         agent.point(final_target, agent.renderer.red())
 
@@ -158,15 +166,45 @@ class JumpShot(BaseRoutine):
 
         distance_remaining = shot_info.distance_remaining
         speed_required = min(distance_remaining / T, 2300)
-        local_final_target = agent.me.local_location(final_target.flatten())
+        local_final_target = agent.me.local_location(Vector(final_target.x, final_target.y, agent.me.location.z))
 
-        utils.defaultDrive(agent, speed_required, local_final_target)
+        if not self.jumping:
+            utils.defaultDrive(agent, speed_required, local_final_target)
+            return
 
-        flip_time = utils._fcap(320. / speed_required - 0.05, 0.1, 0.25)
-        if flip_time - 0.05 < T < flip_time:
-            flip_dir = agent.me.local_location(future_ball_location + Vector(shot_info.shot_vector[0], shot_info.shot_vector[1]) * agent.ball_radius)
-            self.end_next_tick = True
-            agent.push(Flip(flip_dir))
+        if not agent.car.airbourne:
+            self.jump_time = agent.time
+
+        if agent.time - self.jump_time < MAX_JUMP_HOLD_TIME:
+            agent.controller.jump = True
+            self.last_jump = True
+            utils.defaultPD(agent, local_final_target)
+        else:
+            self.last_jump = False
+
+        if T < 0.1:
+            if self.dodge_params is None:
+                flip_dir = agent.me.local_location(future_ball_location + Vector(shot_info.shot_vector[0], shot_info.shot_vector[1]) * agent.ball_radius)
+                target_angle = math.atan2(flip_dir.y, flip_dir.x)
+                yaw = math.sin(target_angle)
+                neg_pitch = math.cos(target_angle)  # negative pitch is down which flips us forward, so cosine and pitch are inversly related
+                self.dodge_params = (
+                    yaw,
+                    -neg_pitch,
+                    utils._fsign(neg_pitch),  # throttle and cosine are directly related
+                )
+
+            agent.controller.yaw = self.dodge_params[0]
+            agent.controller.pitch = self.dodge_params[1]
+            agent.controller.throttle = self.dodge_params[2]
+
+            if self.last_jump:
+                agent.controller.jump = False
+                self.last_jump = False
+            else:
+                agent.controller.jump = True
+        else:
+            utils.defaultThrottle(agent, speed_required)
 
     def on_push(self):
         rlru.confirm_target(self.target_id)
@@ -319,7 +357,7 @@ class GoTo:
 
         if self.vector is not None:
             # See comments for adjustment in jump_shot for explanation
-            side_of_vector = utils.sign(self.vector.cross(Vector(z=1)).dot(car_to_target))
+            side_of_vector = utils._fsign(self.vector.cross(Vector(z=1)).dot(car_to_target))
             car_to_target_perp = car_to_target.cross(Vector(z=side_of_vector)).normalize()
             adjustment = car_to_target.angle2D(self.vector) * distance_remaining / 3.14
             final_target += car_to_target_perp * adjustment
@@ -504,7 +542,7 @@ class Retreat(BaseRoutine):
             target[0] = ball[0]
 
             while utils.friend_near_target(friends, target):
-                target[0] = (target[0] * self_team - horizontal_offset * utils.sign(ball[0]) * self_team) * self_team
+                target[0] = (target[0] * self_team - horizontal_offset * utils._fsign(ball[0]) * self_team) * self_team
 
         target[1] += (inside_goal_offset if abs(target[0]) < 800 else outside_goal_offset) * self_team
         target[2] = 0
@@ -589,7 +627,7 @@ class Shadow(BaseRoutine):
             except ZeroDivisionError:
                 target.x = 0
         else:
-            target.x = (abs(ball_loc.x) + 640) * utils.sign(ball_loc.x)
+            target.x = (abs(ball_loc.x) + 640) * utils._fsign(ball_loc.x)
 
         return Vector(target.x, target.y)
 shadow = Shadow # legacy
