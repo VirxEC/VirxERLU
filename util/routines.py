@@ -54,7 +54,7 @@ class GroundShot(BaseRoutine):
 
         try:
             shot_info = rlru.get_data_for_shot_with_target(self.target_id)
-        except IndexError:
+        except IndexError as e:
             # Either the target has been removed, never existed, or something else has gone wrong
             agent.print(f"WARNING: {e}")
             agent.pop()
@@ -149,7 +149,7 @@ class JumpShot(BaseRoutine):
 
         try:
             shot_info = rlru.get_data_for_shot_with_target(self.target_id)
-        except IndexError:
+        except IndexError as e:
             # Either the target has been removed, never existed, or something else has gone wrong
             agent.print(f"WARNING: {e}")
             agent.pop()

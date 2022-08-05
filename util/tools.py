@@ -21,8 +21,8 @@ def find_ground_shot(agent, target, cap_=6):
 #     return find_any_shot(agent, cap_, can_aerial=False, can_double_jump=False, can_jump=False)
 
 
-# def find_jump_shot(agent, target, cap_=6):
-#     return find_shot(agent, target, cap_, can_aerial=False, can_double_jump=False, can_ground=False)
+def find_jump_shot(agent, target, cap_=6):
+    return find_shot(agent, target, cap_, can_aerial=False, can_double_jump=False, can_ground=False)
 
 
 # def find_any_jump_shot(agent, cap_=6):

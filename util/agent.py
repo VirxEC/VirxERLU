@@ -120,6 +120,7 @@ class VirxERLU(StandaloneBot):
             self.boost_amount = boost_amount[0]
             self.game_mode = game_mode[0]
         else:
+            rlru.set_mutator_settings(mutators)
             self.gravity = gravity[mutators.GravityOption()]
             self.boost_accel = boost_accel[mutators.BoostStrengthOption()]
             self.boost_amount = boost_amount[mutators.BoostOption()]
@@ -480,10 +481,11 @@ class VirxERLU(StandaloneBot):
             while len(self.tick_times) > 120:
                 del self.tick_times[0]
 
+            print(flush=True, end="")
             return SimpleControllerState() if self.disable_driving else self.controller
         except Exception:
             t_file = os.path.join(self.traceback_file[0], "VirxERLU"+self.traceback_file[1])
-            print(f"ERROR with VirxERLU in {self.name}; see '{t_file}' and please report the bug at 'https://github.com/VirxEC/VirxERLU/issues'")
+            print(f"ERROR with VirxERLU in {self.name}; see '{t_file}' and please report the bug at 'https://github.com/VirxEC/VirxERLU/issues'", flush=True)
             print_exc(file=open(t_file, "a"))
             return SimpleControllerState()
 
