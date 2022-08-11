@@ -18,6 +18,7 @@ class GroundShot(BaseRoutine):
         self.intercept_time = intercept_time
         self.target_id = target_id
         self.end_next_tick = False
+        self.distance = []
 
     def update(self, shot: GroundShot):
         if self.intercept_time < shot.intercept_time + 0.1:
@@ -70,6 +71,8 @@ class GroundShot(BaseRoutine):
             agent.pop()
             return
 
+        self.distance.append(Vector(*shot_info.current_path_point).flat_dist(agent.me.location))
+
         final_target = Vector(*shot_info.final_target)
         agent.point(final_target, agent.renderer.red())
 
@@ -94,6 +97,8 @@ class GroundShot(BaseRoutine):
         rlru.confirm_target(self.target_id)
 
     def pre_pop(self):
+        if len(self.distance) > 0:
+            print(sum(self.distance) / len(self.distance))
         rlru.remove_target(self.target_id)
 ground_shot = GroundShot  # legacy
 
@@ -107,6 +112,7 @@ class JumpShot(BaseRoutine):
         self.last_jump = None
         self.dodge_params = None
         self.recovering = False
+        self.distance = []
 
     def update(self, shot: JumpShot):
         if self.intercept_time < shot.intercept_time + 0.1 or self.jumping:
@@ -165,6 +171,9 @@ class JumpShot(BaseRoutine):
             agent.pop()
             return
 
+        current_path_point = Vector(*shot_info.current_path_point)
+        self.distance.append(current_path_point.flat_dist(agent.me.location))
+
         final_target = Vector(*shot_info.final_target)
         agent.point(final_target, agent.renderer.red())
 
@@ -185,7 +194,9 @@ class JumpShot(BaseRoutine):
             self.jumping = True
 
         if not self.jumping:
-            utils.defaultDrive(agent, speed_required, local_final_target)
+            distance = agent.me.right.dot(current_path_point - agent.me.location)
+            # print(distance, flush=True)
+            utils.defaultDrive(agent, speed_required, local_final_target, distance=distance)
             return
 
         if not agent.me.airborne:
@@ -226,6 +237,8 @@ class JumpShot(BaseRoutine):
         rlru.confirm_target(self.target_id)
 
     def pre_pop(self):
+        if len(self.distance) > 0:
+            print(sum(self.distance) / len(self.distance))
         rlru.remove_target(self.target_id)
 jump_shot = JumpShot  # legacy
 
@@ -531,7 +544,7 @@ class Retreat(BaseRoutine):
         return Vector(np_arr=Retreat._get_target(friends, friend_goal, ball._np, np.int32(agent.team)))
 
     @staticmethod
-    @njit('Array(float32, 1, "C")(Array(float32, 2, "C"), Array(float32, 2, "C"), Array(float32, 1, "C"), int32)', fastmath=True)
+    @njit('Array(float32, 1, "C")(Array(float32, 2, "C"), Array(float32, 2, "C"), Array(float32, 1, "C"), int32)', fastmath=True, cache=True)
     def _get_target(friends: np.ndarray, friend_goal: np.ndarray, ball: np.ndarray, team: int) -> np.ndarray:
         target = None
         

@@ -50,6 +50,7 @@ class VirxERLU(StandaloneBot):
         self.debug_ball_path = False
         self.debug_ball_path_precision = 10
         self.disable_driving = False
+        self.debug_vector = Vector()
 
     def initialize_agent(self):
         self.startup_time = time_ns()
@@ -890,7 +891,7 @@ class Matrix3:
         self._np = Matrix3._new_matrix(pitch, yaw, roll)
 
     @staticmethod
-    @njit('Array(float32, 2, "C")(float32, float32, float32)', fastmath=True)
+    @njit('Array(float32, 2, "C")(float32, float32, float32)', fastmath=True, cache=True)
     def _new_matrix(pitch: float, yaw: float, roll: float) -> np.ndarray:
         CP = math.cos(pitch)
         SP = math.sin(pitch)

@@ -39,23 +39,32 @@ def cap_in_field(agent: VirxERLU, target: Vector) -> Vector:
 
 
 @njit('float32(float32, float32)', fastmath=True)
-def steerPD(angle: float, rate: float) -> float:
-    # A Proportional-Derivative control loop used for defaultPD
+def controlPD(angle: float, rate: float) -> float:
+    # A Proportional-Derivative control loop
     return _fcap(((35*(angle+rate))**3)/10, -1, 1)
+steerPD = controlPD  # legacy
 
 
-@njit('Array(float32, 1, "C")(Array(float32, 1, "C"), Array(float32, 1, "C"))', fastmath=True)
-def _get_controller(target_angles: np.ndarray, angular_velocity: np.ndarray) -> np.ndarray:
+@njit('float32(float32, float32, float32)', fastmath=True)
+def controlPID(angle: float, rate: float, distance: float) -> float:
+    # RLU PD + custom integral
+    return _fcap(3.4 * angle + 0.235 * rate + 0.0015 * distance, -1, 1)
+
+@njit('Array(float32, 1, "C")(Array(float32, 1, "C"), Array(float32, 1, "C"), optional(float32))', fastmath=True, cache=True)
+def _get_controller(target_angles: np.ndarray, angular_velocity: np.ndarray, distance: Optional[float]) -> np.ndarray:
     # Once we have the angles we need to rotate, we feed them into PD loops to determing the controller inputs
-    steer = _fcap(3.4 * target_angles[1] + 0.235 * angular_velocity[2], -1, 1)  # Use RLU PID to steer towards target
-    pitch = steerPD(target_angles[0], angular_velocity[1] / 4)
-    yaw = steerPD(target_angles[1], -angular_velocity[2] / 4)
-    roll = steerPD(target_angles[2], angular_velocity[0] / 4)
+    if distance is not None:
+        steer = controlPID(target_angles[1], angular_velocity[2], distance)
+    else:
+        steer = controlPD(target_angles[1], 0)
+    pitch = controlPD(target_angles[0], angular_velocity[1] / 4)
+    yaw = controlPD(target_angles[1], -angular_velocity[2] / 4)
+    roll = controlPD(target_angles[2], angular_velocity[0] / 4)
     
     return np.array((steer, pitch, yaw, roll), dtype=np.float32)
 
 
-def defaultPD(agent: VirxERLU, local_target: Vector, upside_down: bool=False, up: Optional[Vector]=None) -> Tuple[float, float, float]:
+def defaultPD(agent: VirxERLU, local_target: Vector, upside_down: bool=False, up: Optional[Vector]=None, distance: Optional[float]=None) -> Tuple[float, float, float]:
     # points the car towards a given local target.
     # Direction can be changed to allow the car to steer towards a target while driving backwards
 
@@ -67,8 +76,8 @@ def defaultPD(agent: VirxERLU, local_target: Vector, upside_down: bool=False, up
         math.atan2(local_target.y, local_target.x),  # angle required to yaw towards target
         math.atan2(up.y, up.z)  # angle required to roll upright
     )
-    
-    controller = _get_controller(np.array(target_angles, dtype=np.float32), agent.me.angular_velocity._np)
+
+    controller = _get_controller(np.array(target_angles, dtype=np.float32), agent.me.angular_velocity._np, distance)
 
     agent.controller.steer = controller[0]
     agent.controller.pitch = controller[1]
@@ -78,7 +87,7 @@ def defaultPD(agent: VirxERLU, local_target: Vector, upside_down: bool=False, up
     return target_angles
 
 
-@njit('Tuple((float32, boolean))(float32, float32, float32, float32)', fastmath=True)
+@njit('Tuple((float32, boolean))(float32, float32, float32, float32)', fastmath=True, cache=True)
 def _get_air_throttle_and_boost(delta_time: float, boost_accel: float, target_speed: float, car_speed: float) -> Tuple[float, bool]:
     t = target_speed - car_speed
     if t >= boost_accel * delta_time * 3 + AIR_THROTTLE_ACCEL * delta_time:
@@ -87,7 +96,7 @@ def _get_air_throttle_and_boost(delta_time: float, boost_accel: float, target_sp
         return (_fcap(t / (AIR_THROTTLE_ACCEL * delta_time), -1, 1), False)
 
 
-@njit('float32(float32)', fastmath=True)
+@njit('float32(float32)', fastmath=True, cache=True)
 def throttle_acceleration(car_velocity_x: float) -> float:
     x = abs(car_velocity_x)
     if x >= 1410:
@@ -101,7 +110,7 @@ def throttle_acceleration(car_velocity_x: float) -> float:
     return -16 * x + 160
 
 
-@njit('Tuple((float32, boolean))(float32, float32, float32, float32, float32, boolean)', fastmath=True)
+@njit('Tuple((float32, boolean))(float32, float32, float32, float32, float32, boolean)', fastmath=True, cache=True)
 def _get_throttle_and_boost(boost_accel: float, target_speed: float, car_speed: float, angle_to_target: float, up_z: float, handbrake: bool) -> Tuple[float, bool]:
     # Thanks to Chip's RLU speed controller for this
     # https://github.com/samuelpmish/RLUtilities/blob/develop/src/mechanics/drive.cc#L182
@@ -180,8 +189,8 @@ def defaultThrottle(agent: VirxERLU, target_speed: float, target_angles: Optiona
     return car_speed
 
 
-def defaultDrive(agent: VirxERLU, target_speed: float, local_target: Vector) -> Tuple[Tuple[Vector, Vector, Vector], float]:
-    target_angles = defaultPD(agent, local_target)
+def defaultDrive(agent: VirxERLU, target_speed: float, local_target: Vector, distance: Optional[float]=None) -> Tuple[Tuple[Vector, Vector, Vector], float]:
+    target_angles = defaultPD(agent, local_target, distance=distance)
     velocity = defaultThrottle(agent, target_speed, target_angles, local_target)
 
     return target_angles, velocity
@@ -203,7 +212,6 @@ def lerp(a, b, t):
 def _flerp(a: float, b: float, t: float) -> float:
     # Linearly interpolate from a to b using t
     # For instance, when t == 0, a is returned, and when t is 1, b is returned
-    # Works for both numbers and Vectors
     return (b - a) * t + a
 
 
@@ -341,7 +349,7 @@ def _fsign(x: float) -> int:  # Literal[-1, 0, 1]:
     return 0
 
 
-@njit('boolean(Array(float32, 2, "C"), Array(float32, 1, "C"))', fastmath=True)
+@njit('boolean(Array(float32, 2, "C"), Array(float32, 1, "C"))', fastmath=True, cache=True)
 def friend_near_target(friends: np.ndarray, target: np.ndarray) -> bool:
     for i in range(friends.shape[1]):
         if np.linalg.norm(target - friends[i]) < 400:
@@ -451,7 +459,7 @@ def min_non_neg(x: float, y: float) -> float:
 # (y - k) / a = (x - h)^2
 # sqrt((y - k) / a) = x - h
 # sqrt((y - k) / a) + h = x
-@njit('float32(float32, float32, float32, float32)', fastmath=True)
+@njit('float32(float32, float32, float32, float32)', fastmath=True, cache=True)
 def vertex_quadratic_solve_for_x_min_non_neg(a: float, h: float, k: float, y: float) -> float:
     if a == 0:
         return 0
@@ -464,14 +472,14 @@ def vertex_quadratic_solve_for_x_min_non_neg(a: float, h: float, k: float, y: fl
     return min_non_neg(v_sqrt + h, -v_sqrt + h)
 
 
-@njit('float32(float32, float32, float32, float32, float32, float32, float32)', fastmath=True)
+@njit('float32(float32, float32, float32, float32, float32, float32, float32)', fastmath=True, cache=True)
 def get_landing_time(fall_distance: float, falling_time_until_terminal_velocity: float, falling_distance_until_terminal_velocity: float, terminal_velocity: float, k: float, h: float, g: float) -> float:
     if fall_distance * _fsign(-g) <= falling_distance_until_terminal_velocity * _fsign(-g):
         return vertex_quadratic_solve_for_x_min_non_neg(g, h, k, fall_distance)
     return falling_time_until_terminal_velocity + ((fall_distance - falling_distance_until_terminal_velocity) / terminal_velocity)
 
 
-@njit('Array(float32, 1, "C")(Array(float32, 1, "C"), Array(float32, 1, "C"), float32)', fastmath=True)
+@njit('Array(float32, 1, "C")(Array(float32, 1, "C"), Array(float32, 1, "C"), float32)', fastmath=True, cache=True)
 def _get_ground_times(l: np.ndarray, v: np.ndarray, g: float) -> np.ndarray:
     times = np.array([-1., -1.], dtype=np.float32)
 
