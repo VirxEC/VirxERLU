@@ -160,7 +160,18 @@ class Bot(VirxERLU):
     def handle_match_comm(self, msg: dict):
         # NOTE This is for handling any incoming match communications
         # All match comms are Python objects
-        self.print(f"Got TMCP message from {self.all[msg['index']].name}!")
+
+        # Check if an index is specified in the message
+        bot_index = msg.get("index")
+        if bot_index is not None:
+            # Get the car information of the bot with that index
+            bot = self.all[bot_index]
+            # Print out that we got the message
+            self.print(f"Got match comm from {bot.name}!")
+            return
+        
+        # We couldn't figure out who the sender was, so we'll say just that
+        self.print(f"Got match comm from an unknown sender!")
 
     def handle_quick_chat(self, index: int, team: int, quick_chat: QuickChats):
         # NOTE This is for handling any incoming quick chats
