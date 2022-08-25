@@ -450,7 +450,7 @@ class FaceTarget(BaseRoutine):
 
     @staticmethod
     def get_ball_target(agent: VirxERLU) -> Vector:
-        ball = agent.ball.location if agent.me.minimum_time_to_ball == 7 else agent.ball_prediction_struct.slices[agent.min_intercept_slice].physics.location
+        ball = agent.ball.location
         return Vector(ball.x, ball.y)
 
     def run(self, agent: VirxERLU):
