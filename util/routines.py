@@ -14,9 +14,11 @@ from util.agent import BaseRoutine, Vector, VirxERLU, BoostPad
 MAX_JUMP_HOLD_TIME = 0.2
 
 class GroundShot(BaseRoutine):
-    def __init__(self, intercept_time: float, target_id: int):
+    def __init__(self, intercept_time: float, target_id: int, is_forwards: bool, shot_vector: Optional[Vector] = None):
         self.intercept_time = intercept_time
         self.target_id = target_id
+        self.drive_direction = 1 if is_forwards else -1
+        self.shot_vector = shot_vector
         self.end_next_tick = False
         self.distance = []
 
@@ -46,8 +48,12 @@ class GroundShot(BaseRoutine):
             return
 
         future_ball_location = Vector(*rlru.get_slice(self.intercept_time).location)
-
         agent.sphere(future_ball_location, agent.ball_radius, agent.renderer.purple())
+        do_flip = self.future_ball_location.y * utils.side(agent.team) < 0
+
+        if T <= 0.1 and not do_flip and agent.ball.last_touch.car.index == agent.me.index and abs(self.intercept_time - agent.ball.last_touch.time) < 0.1:
+            self.recovering = True
+            return
 
         T = self.intercept_time - agent.time
 
@@ -71,7 +77,12 @@ class GroundShot(BaseRoutine):
             agent.pop()
             return
 
-        self.distance.append(Vector(*shot_info.current_path_point).flat_dist(agent.me.location))
+        if shot_info.turn_targets is not None:
+            agent.point(Vector(*shot_info.turn_targets[0]), agent.renderer.purple())
+            agent.point(Vector(*shot_info.turn_targets[1]), agent.renderer.purple())
+
+        current_path_point = Vector(*shot_info.current_path_point)
+        self.distance.append(current_path_point.flat_dist(agent.me.location))
 
         final_target = Vector(*shot_info.final_target)
         agent.point(final_target, agent.renderer.red())
@@ -82,16 +93,18 @@ class GroundShot(BaseRoutine):
             agent.line(agent.me.location, final_target, agent.renderer.lime())
 
         distance_remaining = shot_info.distance_remaining
-        speed_required = min(distance_remaining / T, 2300)
+        speed_required = utils._fcap(distance_remaining / T * self.drive_direction, -1410, 2300)
         local_final_target = agent.me.local_location(final_target.flatten())
 
-        utils.defaultDrive(agent, speed_required, local_final_target)
+        distance = agent.me.right.dot(current_path_point - agent.me.location)
+        utils.defaultDrive(agent, speed_required, local_final_target, distance=distance)
 
-        flip_time = utils._fcap(320. / speed_required - 0.05, 0.1, 0.25)
-        if flip_time - 0.05 < T < flip_time:
-            flip_dir = agent.me.local_location(future_ball_location + Vector(shot_info.shot_vector[0], shot_info.shot_vector[1]) * agent.ball_radius)
-            self.end_next_tick = True
-            agent.push(Flip(flip_dir))
+        if do_flip:
+            flip_time = utils._fcap(320. / speed_required - 0.05, 0.1, 0.25)
+            if flip_time - 0.05 < T < flip_time:
+                self.end_next_tick = True
+                flip_dir = agent.me.local_location(future_ball_location + Vector(shot_info.shot_vector[0], shot_info.shot_vector[1]) * agent.ball_radius)
+                agent.push(Flip(flip_dir))
 
     def on_push(self):
         rlru.confirm_target(self.target_id)
@@ -104,9 +117,11 @@ ground_shot = GroundShot  # legacy
 
 
 class JumpShot(BaseRoutine):
-    def __init__(self, intercept_time: float, target_id: int):
+    def __init__(self, intercept_time: float, target_id: int, is_forwards: bool, shot_vector: Optional[Vector] = None):
         self.intercept_time = intercept_time
         self.target_id = target_id
+        self.drive_direction = 1 if is_forwards else -1
+        self.shot_vector = shot_vector
         self.jumping = False
         self.jump_time = -1
         self.last_jump = None
@@ -171,6 +186,10 @@ class JumpShot(BaseRoutine):
             agent.pop()
             return
 
+        if shot_info.turn_targets is not None:
+            agent.point(Vector(*shot_info.turn_targets[0]), agent.renderer.purple())
+            agent.point(Vector(*shot_info.turn_targets[1]), agent.renderer.purple())
+
         current_path_point = Vector(*shot_info.current_path_point)
         self.distance.append(current_path_point.flat_dist(agent.me.location))
 
@@ -186,7 +205,7 @@ class JumpShot(BaseRoutine):
             agent.line(agent.me.location, final_target, agent.renderer.lime())
 
         distance_remaining = shot_info.distance_remaining
-        speed_required = min(distance_remaining / T, 2300)
+        speed_required = utils._fcap(distance_remaining / T * self.drive_direction, -1410, 2300)
         local_final_target = agent.me.local_location(Vector(final_target.x, final_target.y, agent.me.location.z))
 
         agent.dbg_2d(f"Required jump time: {round(shot_info.required_jump_time, 1)}")
@@ -195,7 +214,6 @@ class JumpShot(BaseRoutine):
 
         if not self.jumping:
             distance = agent.me.right.dot(current_path_point - agent.me.location)
-            # print(distance, flush=True)
             utils.defaultDrive(agent, speed_required, local_final_target, distance=distance)
             return
 
@@ -241,6 +259,127 @@ class JumpShot(BaseRoutine):
             print(sum(self.distance) / len(self.distance))
         rlru.remove_target(self.target_id)
 jump_shot = JumpShot  # legacy
+
+
+class DoubleJumpShot(BaseRoutine):
+    def __init__(self, intercept_time: float, target_id: int, is_forwards: bool, shot_vector: Optional[Vector] = None):
+        self.intercept_time = intercept_time
+        self.target_id = target_id
+        self.drive_direction = 1 if is_forwards else -1
+        self.shot_vector = shot_vector
+        self.jumping = False
+        self.jump_time = -1
+        self.mid_jump_wait = False
+        self.recovering = False
+        self.distance = []
+
+    def update(self, shot: JumpShot):
+        if self.intercept_time < shot.intercept_time + 0.1 or self.jumping:
+            return
+
+        try:
+            rlru.confirm_target(shot.target_id)
+        except Exception:
+            print_exc()
+            return
+
+        rlru.remove_target(self.target_id)
+
+        self.intercept_time = shot.intercept_time
+        self.target_id = shot.target_id
+
+    def run(self, agent: VirxERLU):
+        T = self.intercept_time - agent.time
+        agent.dbg_3d(f"Time to intercept: {round(T, 1)}")
+
+        if self.recovering:
+            agent.pop()
+            agent.push(Recovery())
+            return
+
+        if agent.me.airborne and not self.jumping:
+            agent.push(Recovery())
+            return
+
+        future_ball_location = Vector(*rlru.get_slice(self.intercept_time).location)
+        agent.sphere(future_ball_location, agent.ball_radius, agent.renderer.purple())
+
+        if T <= 0.1 and self.jumping and self.mid_jump_wait and agent.ball.last_touch.car.index == agent.me.index and abs(self.intercept_time - agent.ball.last_touch.time) < 0.1:
+            self.recovering = True
+            return
+
+        try:
+            shot_info = rlru.get_data_for_shot_with_target(self.target_id)
+        except IndexError as e:
+            # Either the target has been removed, never existed, or something else has gone wrong
+            agent.print(f"WARNING: {e}")
+            agent.pop()
+            return
+        except AssertionError as e:
+            # One of our predictions was incorrect
+            # We could've gotten bumped, the ball bounced weird, or something else
+            agent.print(f"WARNING: {e}")
+            agent.pop()
+            return
+        except ValueError:
+            agent.print(f"WARNING: We ran out of time to execute the shot")
+            agent.pop()
+            return
+
+        if shot_info.turn_targets is not None:
+            agent.point(Vector(*shot_info.turn_targets[0]), agent.renderer.purple())
+            agent.point(Vector(*shot_info.turn_targets[1]), agent.renderer.purple())
+
+        current_path_point = Vector(*shot_info.current_path_point)
+        self.distance.append(current_path_point.flat_dist(agent.me.location))
+
+        final_target = Vector(*shot_info.final_target)
+        agent.point(final_target, agent.renderer.red())
+
+        shot_vector = Vector(*shot_info.shot_vector)
+        agent.line(future_ball_location + shot_vector * agent.ball_radius, future_ball_location + shot_vector * agent.ball_radius * 3, agent.renderer.lime())
+
+        if len(shot_info.path_samples) > 2:
+            agent.polyline(tuple(Vector(sample[0], sample[1], 30) for sample in shot_info.path_samples), agent.renderer.lime())
+        else:
+            agent.line(agent.me.location, final_target, agent.renderer.lime())
+
+        distance_remaining = shot_info.distance_remaining
+        speed_required = utils._fcap(distance_remaining / T * self.drive_direction, -1410, 2300)
+        local_final_target = agent.me.local_location(Vector(final_target.x, final_target.y, agent.me.location.z))
+
+        agent.dbg_2d(f"Required jump time: {round(shot_info.required_jump_time, 1)}")
+        if T < shot_info.required_jump_time:
+            self.jumping = True
+
+        if not self.jumping:
+            distance = agent.me.right.dot(current_path_point - agent.me.location)
+            utils.defaultDrive(agent, speed_required, local_final_target, distance=distance)
+            return
+
+        if not agent.me.airborne:
+            self.jump_time = agent.time
+
+        if agent.time - self.jump_time < MAX_JUMP_HOLD_TIME:
+            agent.controller.jump = True
+            utils.defaultPD(agent, local_final_target)
+        elif not self.mid_jump_wait:
+            agent.controller.jump = False
+            self.mid_jump_wait = True
+        else:
+            agent.controller.jump = True
+
+        if agent.me.airborne:
+            utils.defaultThrottle(agent, speed_required)
+
+    def on_push(self):
+        rlru.confirm_target(self.target_id)
+
+    def pre_pop(self):
+        if len(self.distance) > 0:
+            print(sum(self.distance) / len(self.distance))
+        rlru.remove_target(self.target_id)
+double_jump = DoubleJumpShot  # legacy
 
 
 class Recovery(BaseRoutine):

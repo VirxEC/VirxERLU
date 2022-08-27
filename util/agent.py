@@ -198,6 +198,7 @@ class VirxERLU(StandaloneBot):
     def get_ready(self, packet: GameTickPacket):
         field_info = self.get_field_info()
         self.boosts = tuple(BoostPad(i, field_info.boost_pads[i].location, field_info.boost_pads[i].is_full_boost) for i in range(field_info.num_boosts))
+        
         if self.expected_pads != -1 and len(self.boosts) != self.expected_pads:
             print(f"There are {len(self.boosts)} boost pads instead of {self.expected_pads}! @Tarehart REEEEE!")
             for i, boost in enumerate(self.boosts):
@@ -262,7 +263,7 @@ class VirxERLU(StandaloneBot):
             )
 
     def polyline(self, vectors: list[Vector], color: Optional[list|Color]=None):
-        if self.debugging and self.debug_lines: 
+        if self.debugging and self.debug_lines:
             self.renderer.draw_polyline_3d(
                 tuple(vector.to_vector3() for vector in vectors),
                 self.get_color_from(color)
@@ -298,7 +299,7 @@ class VirxERLU(StandaloneBot):
             self.line(location - d3, location + d3, color)
             self.line(location - d4, location + d4, color)
 
-    def print(self, item):
+    def print(self, item=""):
         if not self.tournament:
             print(f"{self.name}: {item}")
 
@@ -311,11 +312,12 @@ class VirxERLU(StandaloneBot):
     def preprocess(self, packet: GameTickPacket):
         if packet.num_cars != len(self.friends)+len(self.foes)+1 or self.odd_tick == 0:
             self.refresh_player_lists(packet)
+        else:
+            set(map(lambda pad: pad.update(packet), self.boosts))
+            set(map(lambda car: car.update(packet), self.all))
+            self.update_cars_from_all()
 
         rlru.tick(packet)
-        set(map(lambda pad: pad.update(packet), self.boosts))
-        set(map(lambda car: car.update(packet), self.all))
-        self.update_cars_from_all()
         self.ball.update(packet)
         self.game.update(self.team, packet)
 
@@ -361,11 +363,14 @@ class VirxERLU(StandaloneBot):
 
     def is_shooting(self) -> bool:
         stack_routine_name = '' if self.is_clear() else self.stack[0].__class__.__name__
-        return stack_routine_name in {'Aerial', 'DoubleJumpShot', 'JumpShot', 'GroundShot', 'double_jump', 'jump_shot', 'ground_shot', 'short_shot'}
+        return stack_routine_name in {'AerialShot', 'DoubleJumpShot', 'JumpShot', 'GroundShot', 'Aerial', 'double_jump', 'jump_shot', 'ground_shot', 'short_shot'}
 
     def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
         try:
             start = time_ns()
+
+            # reset the debug lists
+            self.debug = [[], []]
 
             # Reset controller
             self.controller.__init__(use_item=True)
@@ -472,10 +477,8 @@ class VirxERLU(StandaloneBot):
 
                         self.renderer.draw_string_2d(20, 300, 2, 2, "\n".join(self.debug[1]), self.renderer.team_color(alt_color=True))
 
-                    if self.debug_ball_path and self.ball_prediction_struct is not None:
-                        self.polyline(tuple(Vector(ball_slice.physics.location.x, ball_slice.physics.location.y, ball_slice.physics.location.z) for ball_slice in self.ball_prediction_struct.slices[::self.debug_ball_path_precision]))
-
-                self.debug = [[], []]
+                    if self.debug_ball_path:
+                        self.polyline(tuple(Vector(*rlru.get_slice_index(i).location) for i in range(0, rlru.get_num_ball_slices(), self.debug_ball_path_precision * 2)), color=self.renderer.yellow())
 
             end = time_ns()
             self.tick_times.append(round((end - start) / 1_000_000, 3))
@@ -544,7 +547,7 @@ class VirxERLU(StandaloneBot):
 
         stack_routine_name = self.stack[0].__class__.__name__
 
-        if stack_routine_name in {'Aerial', 'jump_shot', 'ground_shot', 'double_jump', 'short_shot'}:
+        if stack_routine_name in {'AerialShot', 'DoubleJumpShot', 'JumpShot', "GroundShot", 'Aerial', 'jump_shot', 'ground_shot', 'double_jump', 'short_shot'}:
             tmcp_packet["action"] =  {
                 "type": "BALL",
                 "time": -1 if stack_routine_name == 'short_shot' else self.stack[0].intercept_time,
@@ -552,7 +555,7 @@ class VirxERLU(StandaloneBot):
             }
             return tmcp_packet
 
-        if stack_routine_name == "goto_boost":
+        if stack_routine_name in {"GoToBoost", "goto_boost"}:
             tmcp_packet["action"] = {
                 "type": "BOOST",
                 "target": self.stack[0].boost.index
@@ -806,6 +809,7 @@ class Ball:
     def __init__(self):
         self.location = Vector()
         self.velocity = Vector()
+        self.angular_velocity = Vector()
         self.last_touch = LastTouch()
         self.shape = BallShape()
 
@@ -813,6 +817,7 @@ class Ball:
         ball = packet.game_ball
         self.location = Vector.from_vector(ball.physics.location)
         self.velocity = Vector.from_vector(ball.physics.velocity)
+        self.angular_velocity = Vector.from_vector(ball.physics.angular_velocity)
         self.last_touch.update(packet)
         self.shape.update(packet)
 ball_object = Ball

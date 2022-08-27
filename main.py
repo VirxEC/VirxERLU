@@ -1,3 +1,4 @@
+from rlbot.utils.game_state_util import BallState, GameState, Physics, Vector3
 from rlbot.utils.structures.quick_chats import QuickChats
 
 from util import routines, tools, utils
@@ -53,17 +54,16 @@ class Bot(VirxERLU):
 
             # TODO we might miss the net, even when using a target - make a pair of targets that are small than the goal so we have a better chance of scoring!
             # If the ball is on the enemy's side of the field, or slightly on our side
-            # if self.ball.location.y * utils.side(self.team) < 640:
-            #     # Find a shot, on target - double_jump, jump_shot, and ground_shot are automatically disabled if we're airborne
-            #     shot = tools.find_shot(self, self.foe_goal_shot)
-            shot = tools.find_shot(self, self.foe_goal_shot)
+            if self.ball.location.y * utils.side(self.team) < 640:
+                # Find a shot, on target
+                shot = tools.find_shot(self, self.foe_goal_shot)
 
             # TODO Using an anti-target here could be cool - do to this, pass in a target tuple that's (right_target, left_target) (instead of (left, right)) into tools.find_shot (NOT tools.find_any_shot)
             # TODO When possible, we might want to take a little bit more time to shot the ball anywhere in the opponent's end - this target should probably be REALLY LONG AND HIGH!
             # If we're behind the ball and we couldn't find a shot on target
-            # if shot is None and self.ball.location.y * utils.side(self.team) < self.me.location.y * utils.side(self.team):
-            #     # Find a shot, but without a target - double_jump, jump_shot, and ground_shot are automatically disabled if we're airborne
-            #     shot = tools.find_any_shot(self)
+            if shot is None and self.ball.location.y * utils.side(self.team) < self.me.location.y * utils.side(self.team):
+                # Find a shot, but without a target
+                shot = tools.find_any_shot(self)
 
             # If we found a shot
             if shot is not None:
@@ -73,7 +73,7 @@ class Bot(VirxERLU):
                     self.push(shot)
                 # If the stack isn't clear
                 else:
-                    # Get the current shot's name (ex jump_shot, double_jump, ground_shot or Aerial) as a string
+                    # Get the current shot's name (ex JumpShot, DoubleJumpShot, GroundShot or AerialShot) as a string
                     current_shot_name = self.stack[0].__class__.__name__
                     # Get the new shot's name as a string
                     new_shot_name = shot.__class__.__name__
