@@ -11,10 +11,14 @@ from numba import njit
 from util import utils
 from util.agent import BaseRoutine, Vector, VirxERLU, BoostPad
 
+AIR_THROTTLE_ACCEL = 66 + (2/3)
 MAX_JUMP_HOLD_TIME = 0.2
+JUMP_MAX_DURATION = 0.2
+JUMP_SPEED = 291 + (2/3)
+JUMP_ACC = 1458 + (1/3)
 
 class GroundShot(BaseRoutine):
-    def __init__(self, intercept_time: float, target_id: int, is_forwards: bool, shot_vector: Optional[Vector] = None):
+    def __init__(self, intercept_time: float, target_id: int, is_forwards: bool, shot_vector: Optional[Vector]):
         self.intercept_time = intercept_time
         self.target_id = target_id
         self.drive_direction = 1 if is_forwards else -1
@@ -23,7 +27,7 @@ class GroundShot(BaseRoutine):
         self.distance = []
 
     def update(self, shot: GroundShot):
-        if self.intercept_time < shot.intercept_time + 0.1:
+        if self.intercept_time + 0.1 < shot.intercept_time:
             return
 
         try:
@@ -35,6 +39,8 @@ class GroundShot(BaseRoutine):
         rlru.remove_target(self.target_id)
 
         self.intercept_time = shot.intercept_time
+        self.shot_vector = shot.shot_vector
+        self.drive_direction = shot.drive_direction
         self.target_id = shot.target_id
         self.end_next_tick = False
 
@@ -103,7 +109,7 @@ class GroundShot(BaseRoutine):
             flip_time = utils._fcap(320. / speed_required - 0.05, 0.1, 0.25)
             if flip_time - 0.05 < T < flip_time:
                 self.end_next_tick = True
-                flip_dir = agent.me.local_location(future_ball_location + Vector(shot_info.shot_vector[0], shot_info.shot_vector[1]) * agent.ball_radius)
+                flip_dir = agent.me.local_location(future_ball_location + self.shot_vector.flatten() * agent.ball_radius)
                 agent.push(Flip(flip_dir))
 
     def on_push(self):
@@ -117,7 +123,7 @@ ground_shot = GroundShot  # legacy
 
 
 class JumpShot(BaseRoutine):
-    def __init__(self, intercept_time: float, target_id: int, is_forwards: bool, shot_vector: Optional[Vector] = None):
+    def __init__(self, intercept_time: float, target_id: int, is_forwards: bool, shot_vector: Optional[Vector]):
         self.intercept_time = intercept_time
         self.target_id = target_id
         self.drive_direction = 1 if is_forwards else -1
@@ -130,7 +136,7 @@ class JumpShot(BaseRoutine):
         self.distance = []
 
     def update(self, shot: JumpShot):
-        if self.intercept_time < shot.intercept_time + 0.1 or self.jumping:
+        if self.intercept_time + 0.1 < shot.intercept_time or self.jumping:
             return
 
         try:
@@ -142,6 +148,8 @@ class JumpShot(BaseRoutine):
         rlru.remove_target(self.target_id)
 
         self.intercept_time = shot.intercept_time
+        self.shot_vector = shot.shot_vector
+        self.drive_direction = shot.drive_direction
         self.target_id = shot.target_id
 
     def run(self, agent: VirxERLU):
@@ -196,8 +204,7 @@ class JumpShot(BaseRoutine):
         final_target = Vector(*shot_info.final_target)
         agent.point(final_target, agent.renderer.red())
 
-        shot_vector = Vector(*shot_info.shot_vector)
-        agent.line(future_ball_location + shot_vector * agent.ball_radius, future_ball_location + shot_vector * agent.ball_radius * 3, agent.renderer.lime())
+        agent.line(future_ball_location + self.shot_vector * agent.ball_radius, future_ball_location + self.shot_vector * agent.ball_radius * 3, agent.renderer.lime())
 
         if len(shot_info.path_samples) > 2:
             agent.polyline(tuple(Vector(sample[0], sample[1], 30) for sample in shot_info.path_samples), agent.renderer.lime())
@@ -226,7 +233,7 @@ class JumpShot(BaseRoutine):
 
         if T < 0.1:
             if self.dodge_params is None:
-                flip_dir = agent.me.local_location(future_ball_location + shot_vector * agent.ball_radius)
+                flip_dir = agent.me.local_location(future_ball_location + self.shot_vector * agent.ball_radius)
                 target_angle = math.atan2(flip_dir.y, flip_dir.x)
                 yaw = math.sin(target_angle)
                 neg_pitch = math.cos(target_angle)  # negative pitch is down which flips us forward, so cosine and pitch are inversly related
@@ -262,19 +269,19 @@ jump_shot = JumpShot  # legacy
 
 
 class DoubleJumpShot(BaseRoutine):
-    def __init__(self, intercept_time: float, target_id: int, is_forwards: bool, shot_vector: Optional[Vector] = None):
+    def __init__(self, intercept_time: float, target_id: int, is_forwards: bool, shot_vector: Optional[Vector]):
         self.intercept_time = intercept_time
         self.target_id = target_id
         self.drive_direction = 1 if is_forwards else -1
-        self.shot_vector = shot_vector
+        self.shot_vector = Vector(*shot_vector)
         self.jumping = False
         self.jump_time = -1
         self.mid_jump_wait = False
         self.recovering = False
         self.distance = []
 
-    def update(self, shot: JumpShot):
-        if self.intercept_time < shot.intercept_time + 0.1 or self.jumping:
+    def update(self, shot: DoubleJumpShot):
+        if self.intercept_time + 0.1 < shot.intercept_time or self.jumping:
             return
 
         try:
@@ -286,7 +293,9 @@ class DoubleJumpShot(BaseRoutine):
         rlru.remove_target(self.target_id)
 
         self.intercept_time = shot.intercept_time
+        self.drive_direction = shot.drive_direction
         self.target_id = shot.target_id
+        self.shot_vector = shot.shot_vector
 
     def run(self, agent: VirxERLU):
         T = self.intercept_time - agent.time
@@ -336,8 +345,7 @@ class DoubleJumpShot(BaseRoutine):
         final_target = Vector(*shot_info.final_target)
         agent.point(final_target, agent.renderer.red())
 
-        shot_vector = Vector(*shot_info.shot_vector)
-        agent.line(future_ball_location + shot_vector * agent.ball_radius, future_ball_location + shot_vector * agent.ball_radius * 3, agent.renderer.lime())
+        agent.line(future_ball_location + self.shot_vector * agent.ball_radius, future_ball_location + self.shot_vector * agent.ball_radius * 3, agent.renderer.lime())
 
         if len(shot_info.path_samples) > 2:
             agent.polyline(tuple(Vector(sample[0], sample[1], 30) for sample in shot_info.path_samples), agent.renderer.lime())
@@ -371,16 +379,207 @@ class DoubleJumpShot(BaseRoutine):
 
         if agent.me.airborne:
             utils.defaultThrottle(agent, speed_required)
+double_jump = DoubleJumpShot  # legacy
+
+
+class AerialShot(BaseRoutine):
+    def __init__(self, intercept_time: float, target_id: int, _: bool, shot_vector: Optional[Vector]):
+        self.intercept_time = intercept_time
+        self.target_id = target_id
+        self.shot_vector = shot_vector
+        self.jumping = False
+        self.dodging = False
+        self.jump_time = -1
+        self.counter = 0
+        self.flipping = False
+        self.flip = (0, 0)
+
+    def update(self, shot: AerialShot):
+        if self.intercept_time + 0.1 < shot.intercept_time or self.jumping:
+            return
+
+        try:
+            rlru.confirm_target(shot.target_id)
+        except Exception:
+            print_exc()
+            return
+
+        rlru.remove_target(self.target_id)
+
+        self.intercept_time = shot.intercept_time
+        self.target_id = shot.target_id
+        self.shot_vector = shot.shot_vector
+
+    def run(self, agent: VirxERLU):
+        T = self.intercept_time - agent.time
+        agent.dbg_3d(f"Time to intercept: {round(T, 1)}")
+
+        future_ball_location = Vector(*rlru.get_slice(self.intercept_time).location)
+        agent.sphere(future_ball_location, agent.ball_radius, agent.renderer.purple())
+    
+        if self.flipping:
+            if T <= -1:
+                agent.print("Successful aerial shot + flip")
+                agent.pop()
+
+            agent.dbg_2d("Flipping")
+            agent.controller.pitch = self.flip[0]
+            agent.controller.yaw = self.flip[0]
+            agent.controller.roll = 0
+            agent.controller.jump = True
+            return
+
+        if agent.ball.last_touch.car.index == agent.me.index and abs(self.intercept_time - agent.ball.last_touch.time) < 0.5:
+            agent.print("Successful aerial shot")
+            agent.pop()
+            agent.push(BallRecovery())
+            return
+
+        if agent.me.land_time + 0.6 > agent.time:
+            agent.dbg_2d("Waiting")
+            agent.controller.throttle = 0.001
+            return
+
+        try:
+            shot_info = rlru.get_data_for_shot_with_target(self.target_id)
+        except IndexError as e:
+            # Either the target has been removed, never existed, or something else has gone wrong
+            agent.print(f"WARNING: {e}")
+            agent.pop()
+            if agent.me.airborne:
+                agent.push(BallRecovery())
+            return
+        except AssertionError as e:
+            # One of our predictions was incorrect
+            # We could've gotten bumped, the ball bounced weird, or something else
+            agent.print(f"WARNING: {e}")
+            agent.pop()
+            if agent.me.airborne:
+                agent.push(BallRecovery())
+            return
+        except ValueError:
+            agent.print(f"WARNING: We ran out of time to execute the shot")
+            agent.pop()
+            if agent.me.airborne:
+                agent.push(BallRecovery())
+            return
+
+        final_target = Vector(*shot_info.final_target)
+        agent.point(final_target, agent.renderer.red())
+
+        agent.line(future_ball_location + self.shot_vector * agent.ball_radius, future_ball_location + self.shot_vector * agent.ball_radius * 3, agent.renderer.lime())
+
+        agent.line(agent.me.location, final_target, agent.renderer.lime())
+
+        xf = agent.me.location + agent.me.velocity * T + 0.5 * agent.gravity * T * T
+        vf = agent.me.velocity + agent.gravity * T
+
+        if not agent.me.airborne and shot_info.num_jumps == 0 and agent.me.up.z > 0:
+            agent.print("Unexpectedly landed on the ground")
+            agent.pop()
+            agent.push(BallRecovery())
+            return
+
+        if shot_info.num_jumps > 0 and (self.jumping or not agent.me.airborne):
+            if not self.jumping and not agent.me.airborne:
+                self.jumping = True
+                self.jump_time = agent.time
+                self.counter = 0
+
+            agent.dbg_2d("Jumping")
+
+            jump_elapsed = agent.time - self.jump_time
+
+            # how much of the jump acceleration time is left
+            tau = JUMP_MAX_DURATION - jump_elapsed
+
+            # impulse from the first jump
+            if jump_elapsed == 0:
+                vf += agent.me.up * JUMP_SPEED
+                xf += agent.me.up * JUMP_SPEED * T
+
+            # acceleration from holding jump
+            vf += agent.me.up * JUMP_ACC * tau
+            xf += agent.me.up * JUMP_ACC * tau * (T - 0.5 * tau)
+
+            if shot_info.num_jumps == 2:
+                # impulse from the second jump
+                vf += agent.me.up * JUMP_SPEED
+                xf += agent.me.up * JUMP_SPEED * (T - tau)
+
+                if jump_elapsed <= JUMP_MAX_DURATION:
+                    agent.controller.jump = True
+                else:
+                    self.counter += 1
+
+                if self.counter == 3:
+                    agent.controller.jump = True
+                    self.dodging = True
+                elif self.counter == 4:
+                    self.dodging = self.jumping = False
+            elif jump_elapsed <= JUMP_MAX_DURATION:
+                agent.controller.jump = True
+            else:
+                self.jumping = False
+
+        if shot_info.num_jumps == -1 and not agent.me.doublejumped:
+            agent.controller.jump = True
+
+        delta_x = final_target - xf
+        direction = delta_x.normalize() if not self.jumping or shot_info.num_jumps != 2 else delta_x.flatten().normalize()
+
+        agent.line(agent.me.location, agent.me.location + (direction * 250), agent.renderer.black())
+        c_vf = vf + agent.me.location
+        agent.line(c_vf - Vector(z=agent.ball_radius), c_vf + Vector(z=agent.ball_radius), agent.renderer.blue())
+        agent.line(xf - Vector(z=agent.ball_radius), xf + Vector(z=agent.ball_radius), agent.renderer.red())
+        agent.line(final_target - Vector(z=agent.ball_radius), final_target + Vector(z=agent.ball_radius), agent.renderer.green())
+
+        if T > 0 and not self.flipping:
+            delta_v = delta_x.dot(agent.me.forward) / T
+            target = agent.me.local(direction)
+            boost = False
+
+            # only boost/throttle if we're facing the right direction
+            if (not self.jumping or shot_info.num_jumps != 2) and abs(agent.me.forward.angle(direction)) < 0.5:
+                # the change in velocity the bot needs to put it on an intercept course with the target
+                if agent.me.boost > 0 and delta_v > agent.boost_accel * agent.delta_time * 3 + AIR_THROTTLE_ACCEL * agent.delta_time:
+                    agent.controller.boost = agent.me.airborne
+                    agent.controller.throttle = 1
+                    boost = True
+            
+            if not boost:
+                agent.controller.throttle = utils.cap(delta_v / (AIR_THROTTLE_ACCEL * agent.delta_time), -1, 1)
+
+            if self.jumping and shot_info.num_jumps == 2:
+                if not self.dodging:
+                    utils.defaultPD(agent, target)
+            elif utils.find_landing_plane(agent.me.location, agent.me.velocity, agent.gravity.z) == 4:
+                utils.defaultPD(agent, target, upside_down=True)
+            else:
+                if T < 1 and delta_x.magnitude() < agent.me.hitbox.width / 2:
+                    target = agent.me.local_location(final_target)
+                utils.defaultPD(agent, target, upside_down=agent.me.location.z > final_target.z)
+
+                if T > 0.5 and abs(agent.me.forward.angle((final_target - agent.me.location).normalize())) < 0.5:
+                    agent.controller.roll = 1 if self.shot_vector.z < 0 else -1
+
+        if (not agent.me.doublejumped and (not agent.me.jumped or agent.time - agent.me.land_time < 0.5)) and T < 0.4 and abs(agent.me.up.dot(final_target)) < agent.ball_radius + agent.me.hitbox.width / 2:
+            agent.dbg_2d("Flipping")
+            self.flipping = True
+            vector = agent.me.local_location(final_target).flatten().normalize()
+            target_angle = math.atan2(vector.y, vector.x)
+            self.flip = (-math.cos(target_angle), math.sin(target_angle))
+            agent.controller.pitch = self.flip[0]
+            agent.controller.yaw = self.flip[0]
+            agent.controller.roll = 0
+            agent.controller.jump = True
 
     def on_push(self):
         rlru.confirm_target(self.target_id)
 
     def pre_pop(self):
-        if len(self.distance) > 0:
-            print(sum(self.distance) / len(self.distance))
         rlru.remove_target(self.target_id)
-double_jump = DoubleJumpShot  # legacy
-
+Aerial = AerialShot  # legacy
 
 class Recovery(BaseRoutine):
     # Point towards our velocity vector and land upright, unless we aren't moving very fast
@@ -427,6 +626,17 @@ class Recovery(BaseRoutine):
         if not agent.me.airborne:
             agent.pop()
 recovery = Recovery  # legacy
+
+
+class BallRecovery(BaseRoutine):
+    def __init__(self):
+        self.recovery = recovery()
+
+    def run(self, agent: VirxERLU):
+        self.recovery.target = agent.ball.location
+        self.recovery.target.y = utils.cap(self.recovery.target.y, -5100, 5100)
+        self.recovery.run(agent)
+ball_recovery = BallRecovery  # legacy
 
 
 def brake_handler(agent: VirxERLU) -> bool:

@@ -1,4 +1,3 @@
-from rlbot.utils.game_state_util import BallState, GameState, Physics, Vector3
 from rlbot.utils.structures.quick_chats import QuickChats
 
 from util import routines, tools, utils
@@ -19,8 +18,33 @@ class Bot(VirxERLU):
         self.foe_goal_shot = (self.foe_goal.left_post, self.foe_goal.right_post)
         # NOTE If you want to shoot the ball anywhere BUT between to targets, then make a tuple like (right_target, left_target) - I call this an anti-target
 
+    def freestyle(self):
+        # Keep looking for the soonest possible aerial
+        if self.is_clear() or not self.shooting:
+            # Look for any viable aerial
+            # Normally, ground-based shots are piroritized over aerials
+            # If we search for ONLY aerials, then aerials will be looked for everywhere
+            # Everywhere includes when the ball and the bot are on the ground
+            shot = tools.find_any_aerial(self)
+
+            if shot is not None:
+                if self.is_clear():
+                    self.push(shot)
+                else:
+                    current_shot_name = self.stack[0].__class__.__name__
+                    new_shot_name = shot.__class__.__name__
+
+                    if new_shot_name is current_shot_name:
+                        self.stack[0].update(shot)
+                    else:
+                        self.clear()
+                        self.push(shot)
+
     def run(self):
         # NOTE This method is ran every tick
+
+        # Uncomment to make the bot do fun stuff!
+        # return self.freestyle()
 
         # If the kickoff isn't done
         if not self.kickoff_done:

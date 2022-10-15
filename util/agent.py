@@ -181,6 +181,7 @@ class VirxERLU(StandaloneBot):
         self.last_sent_tmcp_packet = None
         # self.sent_tmcp_packet_times = {}
         self.tick_times: list[float] = []
+        self.refresh_player_list_timer = 0
 
         self.future_ball_location_slice = 180
         self.balL_prediction_struct = None
@@ -217,8 +218,9 @@ class VirxERLU(StandaloneBot):
     def update_cars_from_all(self):
         self.friends = tuple(car for car in self.all if car.team == self.team and car.index != self.index)
         self.foes = tuple(car for car in self.all if car.team != self.team)
-        self.me = self.all[self.index]
-        self.true_name = self.me.true_name
+        if len(self.all) > self.index:
+            self.me = self.all[self.index]
+            self.true_name = self.me.true_name
 
     def refresh_player_lists(self, packet: GameTickPacket):
         # Useful to keep separate from get_ready because humans can join/leave a match
@@ -310,7 +312,9 @@ class VirxERLU(StandaloneBot):
         self.debug[1].append(str(item))
 
     def preprocess(self, packet: GameTickPacket):
-        if packet.num_cars != len(self.friends)+len(self.foes)+1 or self.odd_tick == 0:
+        current_time = time_ns() / 1e+9
+        if packet.num_cars != len(self.friends)+len(self.foes)+1 or abs(current_time - self.refresh_player_list_timer) > 0.5:
+            self.refresh_player_list_timer = current_time
             self.refresh_player_lists(packet)
         else:
             set(map(lambda pad: pad.update(packet), self.boosts))
@@ -325,7 +329,7 @@ class VirxERLU(StandaloneBot):
         self.time = self.game.time
         self.gravity = self.game.gravity
 
-        self.ball_radius = self.ball.shape.hitbox.diameter if self.ball.shape.type in {1, 2} else (sum(self.ball.shape.hitbox.length, self.ball.shape.hitbox.width, self.ball.shape.hitbox.height) / 3)
+        self.ball_radius = self.ball.shape.hitbox.diameter if self.ball.shape.type in {1, 2} else (sum((self.ball.shape.hitbox.length, self.ball.shape.hitbox.width, self.ball.shape.hitbox.height)) / 3)
         self.ball_radius /= 2
 
         # When a new kickoff begins we empty the stack
@@ -337,6 +341,7 @@ class VirxERLU(StandaloneBot):
         self.kickoff_flag = self.game.round_active and self.game.kickoff
 
         self.ball_to_goal = self.friend_goal.location.flat_dist(self.ball.location)
+        self.shooting = self.is_shooting()
 
         self.odd_tick += 1
 
@@ -362,8 +367,9 @@ class VirxERLU(StandaloneBot):
                     print_exc()
 
     def is_shooting(self) -> bool:
-        stack_routine_name = '' if self.is_clear() else self.stack[0].__class__.__name__
-        return stack_routine_name in {'AerialShot', 'DoubleJumpShot', 'JumpShot', 'GroundShot', 'Aerial', 'double_jump', 'jump_shot', 'ground_shot', 'short_shot'}
+        if self.is_clear():
+            return False
+        return self.stack[0].__class__.__name__ in {'AerialShot', 'DoubleJumpShot', 'JumpShot', 'GroundShot', 'Aerial', 'double_jump', 'jump_shot', 'ground_shot', 'short_shot'}
 
     def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
         try:
@@ -385,8 +391,6 @@ class VirxERLU(StandaloneBot):
                 if not self.is_clear():
                     self.clear()
             elif self.game.round_active:
-                self.shooting = self.is_shooting()
-
                 try:
                     self.run()  # Run strategy code; This is a very expensive function to run
                 except Exception:
@@ -677,6 +681,10 @@ class Car:
     def update(self, packet: GameTickPacket):
         car = packet.game_cars[self.index]
         car_phy = car.physics
+
+        if self.airborne and car.has_wheel_contact:
+            self.land_time = packet.game_info.seconds_elapsed
+
         self.location = Vector.from_vector(car_phy.location)
         self.velocity = Vector.from_vector(car_phy.velocity)
         self._local_velocity = self.local(self.velocity)
@@ -688,9 +696,6 @@ class Car:
         self.jumped = car.jumped
         self.doublejumped = car.double_jumped
         self.boost = car.boost
-
-        if self.airborne and car.has_wheel_contact:
-            self.land_time = packet.game_info.seconds_elapsed
 
     @property
     def rotation(self) -> Tuple[Vector, Vector, Vector]:
