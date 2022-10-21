@@ -379,6 +379,12 @@ class DoubleJumpShot(BaseRoutine):
 
         if agent.me.airborne:
             utils.defaultThrottle(agent, speed_required)
+
+    def on_push(self):
+        rlru.confirm_target(self.target_id)
+
+    def pre_pop(self):
+        rlru.remove_target(self.target_id)
 double_jump = DoubleJumpShot  # legacy
 
 
@@ -558,7 +564,7 @@ class AerialShot(BaseRoutine):
             else:
                 if T < 1 and delta_x.magnitude() < agent.me.hitbox.width / 2:
                     target = agent.me.local_location(final_target)
-                utils.defaultPD(agent, target, upside_down=agent.me.location.z > final_target.z)
+                utils.defaultPD(agent, target, up=self.shot_vector * (-1 if agent.me.location.z > final_target.z else 1))
 
                 if T > 0.5 and abs(agent.me.forward.angle((final_target - agent.me.location).normalize())) < 0.5:
                     agent.controller.roll = 1 if self.shot_vector.z < 0 else -1

@@ -18,33 +18,51 @@ class Bot(VirxERLU):
         self.foe_goal_shot = (self.foe_goal.left_post, self.foe_goal.right_post)
         # NOTE If you want to shoot the ball anywhere BUT between to targets, then make a tuple like (right_target, left_target) - I call this an anti-target
 
-    def freestyle(self):
+    def aerial_only(self):
         # Keep looking for the soonest possible aerial
         if self.is_clear() or not self.shooting:
-            # Look for any viable aerial
+            # Look for any viable aerial, prioritizing a shot on goal
             # Normally, ground-based shots are piroritized over aerials
             # If we search for ONLY aerials, then aerials will be looked for everywhere
             # Everywhere includes when the ball and the bot are on the ground
-            shot = tools.find_any_aerial(self)
+            shot = tools.find_aerial(self, self.foe_goal_shot)
 
+            # if shot is None:
+            #     shot = tools.find_any_aerial(self)
+
+            # If we found a shot
             if shot is not None:
+                # If the stack is clear
                 if self.is_clear():
+                    # Shoot
                     self.push(shot)
+                # If the stack isn't clear
                 else:
+                    # Get the current shot's name (ex JumpShot, DoubleJumpShot, GroundShot or AerialShot) as a string
                     current_shot_name = self.stack[0].__class__.__name__
+                    # Get the new shot's name as a string
                     new_shot_name = shot.__class__.__name__
 
+                    # If the shots are the same type
                     if new_shot_name is current_shot_name:
+                        # Update the existing shot with the new information
                         self.stack[0].update(shot)
+                    # If the shots are of different types
                     else:
+                        # Clear the stack
                         self.clear()
+                        # Shoot
                         self.push(shot)
 
     def run(self):
         # NOTE This method is ran every tick
 
-        # Uncomment to make the bot do fun stuff!
-        # return self.freestyle()
+        # If we're playing Heetseeker
+        if self.game_mode == "heetseeker":
+            # Just always look for the soonest aerial and go for it
+            self.aerial_only()
+            # We want to ONLY do aerials, so to prevent any futher code from running, we return
+            return
 
         # If the kickoff isn't done
         if not self.kickoff_done:

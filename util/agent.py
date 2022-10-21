@@ -130,7 +130,7 @@ class VirxERLU(StandaloneBot):
 
         self.expected_pads = -1
 
-        if self.game_mode in {"soccer", "rumble"}:
+        if self.game_mode in {"soccer", "rumble", "heetseeker"}:
             if self.game_map == "ThrowbackStadium_P":
                 self.print("Loading Soccer on Throwback Stadium")
                 rlru.load_soccer_throwback()
