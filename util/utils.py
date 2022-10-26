@@ -1,5 +1,4 @@
 import math
-from queue import Full
 from typing import Generator, Optional, Tuple
 
 import numpy as np
@@ -24,7 +23,7 @@ def cap(x, low, high):
     return low if x < low else (high if x > high else x)
 
 
-@njit('float32(float32, float32, float32)', fastmath=True)
+@njit('float32(float32, float32, float32)', fastmath=True, cache=True)
 def _fcap(x: float, low: float, high: float) -> float:
     # caps/clamps a number between a low and high value
     return low if x < low else (high if x > high else x)
@@ -38,14 +37,14 @@ def cap_in_field(agent: VirxERLU, target: Vector) -> Vector:
     return target
 
 
-@njit('float32(float32, float32)', fastmath=True)
+@njit('float32(float32, float32)', fastmath=True, cache=True)
 def controlPD(angle: float, rate: float) -> float:
     # A Proportional-Derivative control loop
     return _fcap(((35*(angle+rate))**3)/10, -1, 1)
 steerPD = controlPD  # legacy
 
 
-@njit('float32(float32, float32, float32)', fastmath=True)
+@njit('float32(float32, float32, float32)', fastmath=True, cache=True)
 def controlPID(angle: float, rate: float, distance: float) -> float:
     # RLU PD + custom integral
     return _fcap(3.4 * angle + 0.235 * rate + 0.0015 * distance, -1, 1)
@@ -208,7 +207,7 @@ def lerp(a, b, t):
     return (b - a) * t + a
 
 
-@njit('float32(float32, float32, float32)', fastmath=True)
+@njit('float32(float32, float32, float32)', fastmath=True, cache=True)
 def _flerp(a: float, b: float, t: float) -> float:
     # Linearly interpolate from a to b using t
     # For instance, when t == 0, a is returned, and when t is 1, b is returned
@@ -222,7 +221,7 @@ def invlerp(a, b, v):
     return (v - a) / (b - a)
 
 
-@njit('float32(float32)', fastmath=True)
+@njit('float32(float32)', fastmath=True, cache=True)
 def curvature_to_velocity(curve: float) -> float:
     curve = _fcap(curve, 0.00088, 0.0069)
     if 0.00088 <= curve <= 0.00110:
@@ -253,7 +252,7 @@ def is_inside_turn_radius(turn_rad: float, local_target: Vector, steer_direction
     return circle.dist(local_target) < turn_rad
 
 
-@njit('float32(float32)', fastmath=True)
+@njit('float32(float32)', fastmath=True, cache=True)
 def curvature(v: float) -> float:
     # v is the magnitude of the velocity in the car's forward direction
     if 0 <= v < 500:
@@ -274,7 +273,7 @@ def curvature(v: float) -> float:
     return 0
 
 
-@njit('float32(float32)', fastmath=True)
+@njit('float32(float32)', fastmath=True, cache=True)
 def turn_radius(v: float) -> float:
     # v is the magnitude of the velocity in the car's forward direction
     if v == 0:
@@ -320,7 +319,7 @@ def quadratic(a: float, b: float, c: float) -> Tuple[Optional[float], Optional[f
     return (b + inside)/a, (b - inside)/a
 
 
-@njit('int32(int32)', fastmath=True)
+@njit('int32(int32)', fastmath=True, cache=True)
 def side(x: int) -> int:  # Literal[-1, 1]:
     # returns -1 for blue team and 1 for orange team
     return (-1, 1)[x]
@@ -337,7 +336,7 @@ def sign(x: float) -> int:  # Literal[-1, 0, 1]:
     return 0
 
 
-@njit('int32(float32)', fastmath=True)
+@njit('int32(float32)', fastmath=True, cache=True)
 def _fsign(x: float) -> int:  # Literal[-1, 0, 1]:
     # returns the sign of a number, -1, 0, +1
     if x < 0:
@@ -357,20 +356,6 @@ def friend_near_target(friends: np.ndarray, target: np.ndarray) -> bool:
     return False
 
 
-def send_comm(agent: VirxERLU, msg: dict):
-    message = {
-        "index": agent.index,
-        "team": agent.team
-    }
-    msg.update(message)
-    try:
-        agent.matchcomms.outgoing_broadcast.put_nowait({
-            "VirxERLU": msg
-        })
-    except Full:
-        agent.print("Outgoing broadcast is full; couldn't send message")
-
-
 def peek_generator(generator: Generator):
     try:
         return next(generator)
@@ -378,7 +363,7 @@ def peek_generator(generator: Generator):
         return
 
 
-@njit('boolean(float32, float32, float32)', fastmath=True)
+@njit('boolean(float32, float32, float32)', fastmath=True, cache=True)
 def almost_equals(x: float, y: float, threshold: float) -> bool:
     return x - threshold < y and y < x + threshold
 
@@ -398,7 +383,7 @@ def point_inside_quadrilateral_2d(point: Vector, quadrilateral: Tuple[Vector, Ve
     return almost_equals(actual_area, quadrilateral_area, 0.001)
 
 
-@njit('boolean(float32, float32)', fastmath=True)
+@njit('boolean(float32, float32)', fastmath=True, cache=True)
 def perimeter_of_ellipse(a: float, b: float) -> bool:
     return math.pi * (3*(a+b) - math.sqrt((3*a + b) * (a + 3*b)))
 
@@ -448,7 +433,7 @@ def ray_intersects_with_circle(origin: Vector, direction: Vector, center: Vector
     return t0 > 0 or t1 > 0
 
 
-@njit('float32(float32, float32)', fastmath=True)
+@njit('float32(float32, float32)', fastmath=True, cache=True)
 def min_non_neg(x: float, y: float) -> float:
     return x if (x < y and x >= 0) or (y < 0 and x >= 0) else y
 

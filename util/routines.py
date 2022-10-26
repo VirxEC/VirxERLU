@@ -1044,4 +1044,3 @@ class GenericKickoff(BaseRoutine):
             self.flip = True
             agent.push(Flip(agent.me.local_location(agent.foe_goal.location)))
 generic_kickoff = GenericKickoff()  # legacy
-

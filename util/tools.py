@@ -1,4 +1,6 @@
-from typing import Optional, Tuple, Union
+from __future__ import annotations
+
+from typing import Optional, Tuple
 
 import virx_erlu_rlib as rlru
 
@@ -14,39 +16,39 @@ SHOT_SWITCH = (
 )
 
 
-def find_ground_shot(agent, target, cap_=6):
+def find_ground_shot(agent: VirxERLU, target: Tuple[Vector, Vector], cap_: int=6) -> Optional[GroundShot]:
     return find_shot(agent, target, cap_, can_aerial=False, can_double_jump=False, can_jump=False)
 
 
-def find_any_ground_shot(agent, cap_=6):
+def find_any_ground_shot(agent: VirxERLU, cap_: int=6) -> Optional[GroundShot]:
     return find_any_shot(agent, cap_, can_aerial=False, can_double_jump=False, can_jump=False)
 
 
-def find_jump_shot(agent, target, cap_=6):
+def find_jump_shot(agent: VirxERLU, target: Tuple[Vector, Vector], cap_: int=6) -> Optional[JumpShot]:
     return find_shot(agent, target, cap_, can_aerial=False, can_double_jump=False, can_ground=False)
 
 
-def find_any_jump_shot(agent, cap_=6):
+def find_any_jump_shot(agent: VirxERLU, cap_: int=6) -> Optional[JumpShot]:
     return find_any_shot(agent, cap_, can_aerial=False, can_double_jump=False, can_ground=False)
 
 
-def find_double_jump(agent, target, cap_=6):
+def find_double_jump(agent: VirxERLU, target: Tuple[Vector, Vector], cap_: int=6) -> Optional[DoubleJumpShot]:
     return find_shot(agent, target, cap_, can_aerial=False, can_jump=False, can_ground=False)
 
 
-def find_any_double_jump(agent, cap_=6):
+def find_any_double_jump(agent: VirxERLU, cap_: int=6) -> Optional[DoubleJumpShot]:
     return find_any_shot(agent, cap_, can_aerial=False, can_jump=False, can_ground=False)
 
 
-def find_aerial(agent, target, cap_=6):
+def find_aerial(agent: VirxERLU, target: Tuple[Vector, Vector], cap_: int=6) -> Optional[AerialShot]:
     return find_shot(agent, target, cap_, can_double_jump=False, can_jump=False, can_ground=False)
 
 
-def find_any_aerial(agent, cap_=6):
+def find_any_aerial(agent: VirxERLU, cap_: int=6) -> Optional[AerialShot]:
     return find_any_shot(agent, cap_, can_double_jump=False, can_jump=False, can_ground=False)
 
 
-def find_shot(agent: VirxERLU, target: Tuple[Vector, Vector], cap_: int=6, can_aerial: bool=True, can_double_jump: bool=True, can_jump: bool=True, can_ground: bool=True) -> Optional[Union[GroundShot, JumpShot, DoubleJumpShot, AerialShot]]:
+def find_shot(agent: VirxERLU, target: Tuple[Vector, Vector], cap_: int=6, can_aerial: bool=True, can_double_jump: bool=True, can_jump: bool=True, can_ground: bool=True) -> Optional[GroundShot | JumpShot | DoubleJumpShot | AerialShot]:
     if not can_aerial and not can_double_jump and not can_jump and not can_ground:
         agent.print("WARNING: All shots were disabled when find_shot was ran")
         return
@@ -68,7 +70,7 @@ def find_shot(agent: VirxERLU, target: Tuple[Vector, Vector], cap_: int=6, can_a
     return _get_shot_with_target_id(target_id, can_ground, can_jump, can_double_jump, can_aerial)
 
 
-def find_any_shot(agent: VirxERLU, cap_: int=6, can_aerial: bool=True, can_double_jump: bool=True, can_jump: bool=True, can_ground: bool=True) -> Optional[Union[GroundShot, JumpShot, DoubleJumpShot, AerialShot]]:
+def find_any_shot(agent: VirxERLU, cap_: int=6, can_aerial: bool=True, can_double_jump: bool=True, can_jump: bool=True, can_ground: bool=True) -> Optional[GroundShot | JumpShot | DoubleJumpShot | AerialShot]:
     if not can_aerial and not can_double_jump and not can_jump and not can_ground:
         agent.print("WARNING: All shots were disabled when find_shot was ran")
         return
@@ -89,7 +91,7 @@ def find_any_shot(agent: VirxERLU, cap_: int=6, can_aerial: bool=True, can_doubl
     return _get_shot_with_target_id(target_id, can_ground, can_jump, can_double_jump, can_aerial)
 
 
-def _get_shot_with_target_id(target_id: int, may_ground_shot: bool, may_jump_shot: bool, may_double_jump_shot: bool, may_aerial_shot: bool) -> Optional[Union[GroundShot, JumpShot, DoubleJumpShot, AerialShot]]:
+def _get_shot_with_target_id(target_id: int, may_ground_shot: bool, may_jump_shot: bool, may_double_jump_shot: bool, may_aerial_shot: bool) -> Optional[GroundShot | JumpShot | DoubleJumpShot | AerialShot]:
     shot = rlru.get_shot_with_target(target_id, False, may_ground_shot, may_jump_shot, may_double_jump_shot, may_aerial_shot, only=True)
 
     if shot.found:

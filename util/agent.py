@@ -183,8 +183,7 @@ class VirxERLU(StandaloneBot):
         self.tick_times: list[float] = []
         self.refresh_player_list_timer = 0
 
-        self.future_ball_location_slice = 180
-        self.balL_prediction_struct = None
+        self.future_ball_location_slice = 360
 
     def retire(self):
         # Stop the currently running threads
@@ -348,8 +347,6 @@ class VirxERLU(StandaloneBot):
         if self.odd_tick > 3:
             self.odd_tick = 0
 
-        self.ball_prediction_struct = self.get_ball_prediction_struct()
-
         if self.matchcomms_root is not None:
             while 1:
                 try:
@@ -443,8 +440,8 @@ class VirxERLU(StandaloneBot):
                     if self.show_coords:
                         car = self.me
 
-                        self.debug[1].insert(0, f"Hitbox: {round(self.me.hitbox)}")
-                        self.debug[1].insert(0, f"Location: {round(self.me.location)}")
+                        self.debug[1].insert(0, f"Hitbox: {round(car.hitbox)}")
+                        self.debug[1].insert(0, f"Location: {round(car.location)}")
 
                         center = car.location
                         top = car.up * (car.hitbox.height / 2)
@@ -662,7 +659,7 @@ class Car:
     def local_location(self, location: Vector) -> Vector:
         # Returns the location of an item relative to the car
         # x is how far the location is forwards (+) or backwards (-)
-        # y is the velocity to the right (+) or left (-)
+        # y is how far the location is to the right (+) or left (-)
         # z is how far the location is upwards (+) or downwards (-)
         return self.local(location - self.location)
 
@@ -757,9 +754,9 @@ class Hitbox:
         return f"Hitbox(length={self.length}, width={self.width}, height={self.height})"
 
     # round(self)
-    def __round__(self, decimals: int=0) -> Hitbox:
+    def __round__(self, ndigits: Optional[int]=None) -> Hitbox:
         # Rounds all of the values
-        return Hitbox(*(round(euler_angle) for euler_angle in self))
+        return Hitbox(*(round(euler_angle, ndigits) for euler_angle in self))
 hitbox_object = Hitbox  # legacy
 
 
