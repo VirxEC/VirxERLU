@@ -24,7 +24,6 @@ class GroundShot(BaseRoutine):
         self.drive_direction = 1 if is_forwards else -1
         self.shot_vector = shot_vector
         self.end_next_tick = False
-        self.distance = []
 
     def update(self, shot: GroundShot):
         if self.intercept_time + 0.1 < shot.intercept_time:
@@ -88,8 +87,6 @@ class GroundShot(BaseRoutine):
             agent.point(Vector(*shot_info.turn_targets[1]), agent.renderer.purple())
 
         current_path_point = Vector(*shot_info.current_path_point)
-        self.distance.append(current_path_point.flat_dist(agent.me.location))
-
         final_target = Vector(*shot_info.final_target)
         agent.point(final_target, agent.renderer.red())
 
@@ -116,8 +113,6 @@ class GroundShot(BaseRoutine):
         rlru.confirm_target(self.target_id)
 
     def pre_pop(self):
-        if len(self.distance) > 0:
-            print(sum(self.distance) / len(self.distance))
         rlru.remove_target(self.target_id)
 ground_shot = GroundShot  # legacy
 
@@ -133,7 +128,6 @@ class JumpShot(BaseRoutine):
         self.last_jump = None
         self.dodge_params = None
         self.recovering = False
-        self.distance = []
 
     def update(self, shot: JumpShot):
         if self.intercept_time + 0.1 < shot.intercept_time or self.jumping:
@@ -199,8 +193,6 @@ class JumpShot(BaseRoutine):
             agent.point(Vector(*shot_info.turn_targets[1]), agent.renderer.purple())
 
         current_path_point = Vector(*shot_info.current_path_point)
-        self.distance.append(current_path_point.flat_dist(agent.me.location))
-
         final_target = Vector(*shot_info.final_target)
         agent.point(final_target, agent.renderer.red())
 
@@ -262,8 +254,6 @@ class JumpShot(BaseRoutine):
         rlru.confirm_target(self.target_id)
 
     def pre_pop(self):
-        if len(self.distance) > 0:
-            print(sum(self.distance) / len(self.distance))
         rlru.remove_target(self.target_id)
 jump_shot = JumpShot  # legacy
 
@@ -278,7 +268,6 @@ class DoubleJumpShot(BaseRoutine):
         self.jump_time = -1
         self.mid_jump_wait = False
         self.recovering = False
-        self.distance = []
 
     def update(self, shot: DoubleJumpShot):
         if self.intercept_time + 0.1 < shot.intercept_time or self.jumping:
@@ -340,8 +329,6 @@ class DoubleJumpShot(BaseRoutine):
             agent.point(Vector(*shot_info.turn_targets[1]), agent.renderer.purple())
 
         current_path_point = Vector(*shot_info.current_path_point)
-        self.distance.append(current_path_point.flat_dist(agent.me.location))
-
         final_target = Vector(*shot_info.final_target)
         agent.point(final_target, agent.renderer.red())
 
