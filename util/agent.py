@@ -366,7 +366,7 @@ class VirxERLU(StandaloneBot):
     def is_shooting(self) -> bool:
         if self.is_clear():
             return False
-        return self.stack[0].__class__.__name__ in {'AerialShot', 'DoubleJumpShot', 'JumpShot', 'GroundShot', 'Aerial', 'double_jump', 'jump_shot', 'ground_shot', 'short_shot'}
+        return self.stack[0].__class__.__name__ in {'AerialShot', 'DoubleJumpShot', 'JumpShot', 'GroundShot', 'Aerial', 'double_jump', 'jump_shot', 'ground_shot', 'ShortShot', 'short_shot'}
 
     def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
         try:
