@@ -548,11 +548,11 @@ class VirxERLU(StandaloneBot):
 
         stack_routine_name = self.stack[0].__class__.__name__
 
-        if stack_routine_name in {'AerialShot', 'DoubleJumpShot', 'JumpShot', "GroundShot", 'Aerial', 'jump_shot', 'ground_shot', 'double_jump', 'short_shot'}:
+        if stack_routine_name in {'AerialShot', 'DoubleJumpShot', 'JumpShot', "GroundShot", 'Aerial', 'jump_shot', 'ground_shot', 'double_jump', 'ShortShot', 'short_shot'}:
             tmcp_packet["action"] =  {
                 "type": "BALL",
-                "time": -1 if stack_routine_name == 'short_shot' else self.stack[0].intercept_time,
-                "direction": [0, 0, 0] if stack_routine_name == 'short_shot' or self.stack[0].shot_vector is None else list(self.stack[0].shot_vector)
+                "time": -1 if stack_routine_name in {'ShortShot', 'short_shot'} else self.stack[0].intercept_time,
+                "direction": [0, 0, 0] if stack_routine_name in {'ShortShot', 'short_shot'} or self.stack[0].shot_vector is None else list(self.stack[0].shot_vector)
             }
             return tmcp_packet
 
