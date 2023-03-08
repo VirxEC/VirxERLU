@@ -59,11 +59,11 @@ short_shot = ShortShot  # legacy
 
 
 class GroundShot(BaseRoutine):
-    def __init__(self, intercept_time: float, target_id: int, is_forwards: bool, shot_vector: Optional[Vector]):
-        self.intercept_time = intercept_time
+    def __init__(self, shot_info: rlru.BasicShotInfo, target_id: int):
+        self.intercept_time = shot_info.time
         self.target_id = target_id
-        self.drive_direction = 1 if is_forwards else -1
-        self.shot_vector = shot_vector
+        self.drive_direction = 1 if shot_info.is_forwards else -1
+        self.shot_vector = Vector(*shot_info.shot_vector)
         self.end_next_tick = False
 
     def update(self, shot: GroundShot):
@@ -159,11 +159,11 @@ ground_shot = GroundShot  # legacy
 
 
 class JumpShot(BaseRoutine):
-    def __init__(self, intercept_time: float, target_id: int, is_forwards: bool, shot_vector: Optional[Vector]):
-        self.intercept_time = intercept_time
+    def __init__(self, shot_info: rlru.BasicShotInfo, target_id: int):
+        self.intercept_time = shot_info.time
         self.target_id = target_id
-        self.drive_direction = 1 if is_forwards else -1
-        self.shot_vector = shot_vector
+        self.drive_direction = 1 if shot_info.is_forwards else -1
+        self.shot_vector = Vector(*shot_info.shot_vector)
         self.jumping = False
         self.jump_time = -1
         self.last_jump = None
@@ -300,11 +300,11 @@ jump_shot = JumpShot  # legacy
 
 
 class DoubleJumpShot(BaseRoutine):
-    def __init__(self, intercept_time: float, target_id: int, is_forwards: bool, shot_vector: Optional[Vector]):
-        self.intercept_time = intercept_time
+    def __init__(self, shot_info: rlru.BasicShotInfo, target_id: int):
+        self.intercept_time = shot_info.time
         self.target_id = target_id
-        self.drive_direction = 1 if is_forwards else -1
-        self.shot_vector = Vector(*shot_vector)
+        self.drive_direction = 1 if shot_info.is_forwards else -1
+        self.shot_vector = Vector(*shot_info.shot_vector)
         self.jumping = False
         self.jump_time = -1
         self.mid_jump_wait = False
@@ -417,10 +417,10 @@ double_jump = DoubleJumpShot  # legacy
 
 
 class AerialShot(BaseRoutine):
-    def __init__(self, intercept_time: float, target_id: int, _: bool, shot_vector: Optional[Vector]):
-        self.intercept_time = intercept_time
+    def __init__(self, shot_info: rlru.BasicShotInfo, target_id: int):
+        self.intercept_time = shot_info.time
         self.target_id = target_id
-        self.shot_vector = shot_vector
+        self.shot_vector = Vector(*shot_info.shot_vector)
         self.jumping = False
         self.dodging = False
         self.jump_time = -1

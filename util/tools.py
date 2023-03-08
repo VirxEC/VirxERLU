@@ -95,7 +95,7 @@ def _get_shot_with_target_id(target_id: int, may_ground_shot: bool, may_jump_sho
     shot = rlru.get_shot_with_target(target_id, False, may_ground_shot, may_jump_shot, may_double_jump_shot, may_aerial_shot, only=True)
 
     if shot.found:
-        return SHOT_SWITCH[int(shot.shot_type)](shot.time, target_id, shot.is_forwards, Vector(*shot.shot_vector))
+        return SHOT_SWITCH[int(shot.shot_type)](shot, target_id)
 
 
 def get_slices(agent: VirxERLU, cap_: int) -> Optional[Tuple[int, int]]:
