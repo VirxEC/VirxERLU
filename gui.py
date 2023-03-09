@@ -17,7 +17,7 @@ class Gui(Thread):
 
         root.title("VirxEC/VirxERLU")
 
-        root.geometry("270x310")
+        root.geometry("270x330")
 
         title = ttk.Label(root, text=f"{self.agent.name} hosted by VirxERLU")
         title.pack()
@@ -57,6 +57,17 @@ class Gui(Thread):
 
         debug_2d = ttk.Checkbutton(root, text='Debug 2D', variable=debug_2d_bool, command=set_debug_2d)
         debug_2d.pack()
+
+        # TMCP
+
+        tmcp_bool = BooleanVar()
+        tmcp_bool.set(self.agent.debug_tmcp)
+
+        def set_tmcp():
+            self.agent.debug_tmcp = tmcp_bool.get()
+
+        tmcp_btn = ttk.Checkbutton(root, text='TMCP (2D)', variable=tmcp_bool, command=set_tmcp)
+        tmcp_btn.pack()
 
         # Location
 

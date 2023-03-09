@@ -104,6 +104,10 @@ def get_slices(agent: VirxERLU, cap_: int) -> Optional[Tuple[int, int]]:
 
     # If we're shooting, crop the struct
     if agent.shooting and agent.stack[0].__class__.__name__ not in {'ShortShot', 'short_shot'}:
+        # if the shot has a jumping property, and the property is True, then we shouldn't interrupt that
+        if hasattr(agent.stack[0], "jumping") and agent.stack[0].jumping:
+            return
+
         # Get the time remaining
         time_remaining = agent.stack[0].intercept_time - agent.time
 

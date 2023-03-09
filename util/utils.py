@@ -274,10 +274,10 @@ def curvature(v: float) -> float:
         return 0.0043 - 1.95e-6 * v
 
     if 1500 <= v < 1750:
-        return 0.003025 - 1.1e-7 * v
+        return 0.003025 - 1.1e-6 * v
 
     if 1750 <= v < 2500:
-        return 0.0018 - 0.4e-7 * v
+        return 0.0018 - 4e-7 * v
 
     return 0
 
@@ -287,7 +287,7 @@ def turn_radius(v: float) -> float:
     # v is the magnitude of the velocity in the car's forward direction
     if v == 0:
         return 0
-    return 1.0 / curvature(v)
+    return 1.0 / curvature(min(abs(v), 2300)) 
 
 
 def in_field(point: Vector, radius: float) -> bool:

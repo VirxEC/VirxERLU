@@ -91,7 +91,7 @@ class GroundShot(BaseRoutine):
 
         future_ball_location = Vector(*rlru.get_slice(self.intercept_time).location)
         agent.sphere(future_ball_location, agent.ball_radius, agent.renderer.purple())
-        do_flip = self.future_ball_location.y * utils.side(agent.team) < 0
+        do_flip = self.future_ball_location.y * agent.friend_team_side < 0
 
         if T <= 0.1 and not do_flip and agent.ball.last_touch.car.index == agent.me.index and abs(self.intercept_time - agent.ball.last_touch.time) < 0.1:
             self.recovering = True
@@ -899,10 +899,10 @@ class Retreat(BaseRoutine):
 
         ball = Vector(ball_slice.x, ball_slice.y)
         if render: agent.sphere(ball + Vector(z=agent.ball_radius), agent.ball_radius, color=agent.renderer.black())
-        ball.y *= utils.side(agent.team)
+        ball.y *= agent.friend_team_side
 
-        if ball.y < agent.ball.location.y * utils.side(agent.team):
-            ball = Vector(agent.ball.location.x, agent.ball.location.y * utils.side(agent.team) + 640)
+        if ball.y < agent.ball.location.y * agent.friend_team_side:
+            ball = Vector(agent.ball.location.x, agent.ball.location.y * agent.friend_team_side + 640)
 
         return ball
 
@@ -979,12 +979,12 @@ class Shadow(BaseRoutine):
                 agent.push(FaceTarget(ball=True))
         else:
             self.goto.target = target
-            self.goto.vector = ball_loc * Vector(y=utils.side(agent.team)) if target.y * utils.side(agent.team) < 1280 else None
+            self.goto.vector = ball_loc * Vector(y=agent.friend_team_side) if target.y * agent.friend_team_side < 1280 else None
             self.goto.run(agent)
 
     @staticmethod
     def switch_to_retreat(agent: VirxERLU, ball: Vector, target: Vector) -> bool:
-        return agent.me.location.y * utils.side(agent.team) < ball.y or ball.y > 2560 or target.y * utils.side(agent.team) > 4480
+        return agent.me.location.y * agent.friend_team_side < ball.y or ball.y > 2560 or target.y * agent.friend_team_side > 4480
 
     @staticmethod
     def is_viable(agent: VirxERLU, ignore_distance: bool=False, ignore_retreat=False) -> bool:
@@ -998,10 +998,10 @@ class Shadow(BaseRoutine):
         ball_slice = agent.ball.location
         ball_loc = Vector(ball_slice.x, ball_slice.y)
         if render: agent.sphere(ball_loc + Vector(z=agent.ball_radius), agent.ball_radius, color=agent.renderer.black())
-        ball_loc.y *= utils.side(agent.team)
+        ball_loc.y *= agent.friend_team_side
 
-        if ball_loc.y < -2560 or (ball_loc.y < agent.ball.location.y * utils.side(agent.team)):
-            ball_loc = Vector(agent.ball.location.x, agent.ball.location.y * utils.side(agent.team) - 640)
+        if ball_loc.y < -2560 or (ball_loc.y < agent.ball.location.y * agent.friend_team_side):
+            ball_loc = Vector(agent.ball.location.x, agent.ball.location.y * agent.friend_team_side - 640)
 
         return ball_loc
 
@@ -1020,12 +1020,12 @@ class Shadow(BaseRoutine):
             ]
             distance = distances[min(len(agent.friends), 2)]
 
-        target = Vector(y=(ball_loc.y + distance) * utils.side(agent.team))
-        if target.y * utils.side(agent.team) > -1280:
+        target = Vector(y=(ball_loc.y + distance) * agent.friend_team_side)
+        if target.y * agent.friend_team_side > -1280:
             # find the proper x coord for us to stop a shot going to the net
             # y = mx + b <- yes, finally! 7th grade math is paying off xD
             p1 = Retreat.get_target(agent)
-            p2 = ball_loc * Vector(x=1, y=utils.side(agent.team))
+            p2 = ball_loc * Vector(x=1, y=agent.friend_team_side)
             try:
                 m = (p2.y - p1.y) / (p2.x - p1.x)
                 b = p1.y - (m * p1.x)
@@ -1054,7 +1054,7 @@ class GenericKickoff(BaseRoutine):
             agent.pop()
             return
 
-        target = agent.ball.location + Vector(y=(200 if agent.gravity.z < -600 and agent.gravity.z > -700 else 50) * utils.side(agent.team))
+        target = agent.ball.location + Vector(y=(200 if agent.gravity.z < -600 and agent.gravity.z > -700 else 50) * agent.friend_team_side)
         local_target = agent.me.local_location(target)
 
         utils.defaultPD(agent, local_target)

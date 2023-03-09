@@ -29,6 +29,17 @@ EXTRA_DEBUGGING = False
 if not TOURNAMENT_MODE and EXTRA_DEBUGGING:
     from gui import Gui
 
+# Make true to do stuff like read player inputs events, stat events, and spectate events
+HANDLE_PLAYER_EVENTS = False
+
+if HANDLE_PLAYER_EVENTS:
+    from threading import Thread
+
+    from rlbot.messages.flat.PlayerInputChange import PlayerInputChange
+    from rlbot.messages.flat.PlayerSpectate import PlayerSpectate
+    from rlbot.messages.flat.PlayerStatEvent import PlayerStatEvent
+    from rlbot.socket.socket_manager import SocketRelay
+
 
 class VirxERLU(StandaloneBot):
     # Massive thanks to ddthj/GoslingAgent (GitHub repo) for the basis of VirxERLU
@@ -38,7 +49,10 @@ class VirxERLU(StandaloneBot):
         super().__init__(name, team, index)
         self.tournament = TOURNAMENT_MODE
         self.extra_debugging = EXTRA_DEBUGGING
+        self.handle_player_events = HANDLE_PLAYER_EVENTS
         self.true_name = re.split(r' \(\d+\)$', self.name)[0]
+        self.friend_team_side = (-1, 1)[team]  # -1 for blue team and 1 for orange team
+        self.foe_team_side = -self.friend_team_side
 
         self.debug = [[], []]
         self.debugging = not self.tournament
@@ -46,6 +60,7 @@ class VirxERLU(StandaloneBot):
         self.debug_3d_bool = True
         self.debug_stack_bool = True
         self.debug_2d_bool = self.name == self.true_name
+        self.debug_tmcp = self.debug_2d_bool
         self.show_coords = False
         self.debug_ball_path = False
         self.debug_ball_path_precision = 10
@@ -64,7 +79,7 @@ class VirxERLU(StandaloneBot):
             os.mkdir(error_folder)
 
         self.traceback_file = (
-            os.path.join(error_folder),
+            error_folder,
             f"-traceback ({T}).txt"
         )
 
@@ -72,6 +87,16 @@ class VirxERLU(StandaloneBot):
             self.gui = Gui(self)
             self.print("Starting the GUI...")
             self.gui.start()
+
+        if self.handle_player_events and not self.tournament:
+            self.socket_relay = SocketRelay()
+            self.socket_relay.player_input_change_handlers.append(self.handle_input_change)
+            self.socket_relay.player_spectate_handler.append(self.handle_player_spectate)
+            self.socket_relay.player_stat_handlers.append(self.handle_player_stat)
+
+            self.print("Starting the player event handler...")
+            self.non_blocking_socket_relay = Thread(target=self.socket_relay.connect_and_run, args=(False, True, False))
+            self.non_blocking_socket_relay.start()
 
         self.print("Building game information")
 
@@ -179,7 +204,7 @@ class VirxERLU(StandaloneBot):
         self.odd_tick = -1
         self.delta_time = 1 / 120
         self.last_sent_tmcp_packet = None
-        # self.sent_tmcp_packet_times = {}
+        self.sent_tmcp_packet_times = {}
         self.tick_times: list[float] = []
         self.refresh_player_list_timer = 0
 
@@ -189,6 +214,10 @@ class VirxERLU(StandaloneBot):
         # Stop the currently running threads
         if not self.tournament and self.extra_debugging:
             self.gui.stop()
+
+        if self.handle_player_events:
+            self.socket_relay.disconnect()
+            self.non_blocking_socket_relay.join()
 
     def is_hot_reload_enabled(self) -> bool:
         # The tkinter GUI isn't compatible with hot reloading
@@ -385,8 +414,12 @@ class VirxERLU(StandaloneBot):
             self.preprocess(packet)
 
             if self.me.demolished:
-                if not self.is_clear():
-                    self.clear()
+                try:
+                    self.demolished()
+                except Exception:
+                    t_file = os.path.join(self.traceback_file[0], self.name+self.traceback_file[1])
+                    print(f"ERROR in {self.name}; see '{t_file}'")
+                    print_exc(file=open(t_file, "a"))
             elif self.game.round_active:
                 try:
                     self.run()  # Run strategy code; This is a very expensive function to run
@@ -404,11 +437,15 @@ class VirxERLU(StandaloneBot):
                         self.matchcomms.outgoing_broadcast.put_nowait(tmcp_packet)
                         self.last_sent_tmcp_packet = tmcp_packet
 
-                        # t = math.floor(self.time)
-                        # if self.sent_tmcp_packet_times.get(t) is None:
-                        #     self.sent_tmcp_packet_times[t] = 1
-                        # else:
-                        #     self.sent_tmcp_packet_times[t] += 1
+                        if self.debug_tmcp:
+                            t = math.floor(self.time)
+                            if self.sent_tmcp_packet_times.get(t) is None:
+                                self.sent_tmcp_packet_times[t] = 1
+                            else:
+                                self.sent_tmcp_packet_times[t] += 1
+
+                            while len(self.sent_tmcp_packet_times) > 10:
+                                del self.sent_tmcp_packet_times[min(self.sent_tmcp_packet_times.keys())]
                 except Exception:
                     t_file = os.path.join(self.traceback_file[0], self.name+"-TMCP"+self.traceback_file[1])
                     print(f"ERROR in {self.name} with sending TMCP packet; see '{t_file}'")
@@ -423,6 +460,11 @@ class VirxERLU(StandaloneBot):
                         t_file = os.path.join(self.traceback_file[0], r_name+self.traceback_file[1])
                         print(f"ERROR in {self.name}'s {r_name} routine; see '{t_file}'")
                         print_exc(file=open(t_file, "a"))
+
+                end = time_ns()
+                self.tick_times.append(round((end - start) / 1_000_000, 3))
+                while len(self.tick_times) > 120:
+                    del self.tick_times[0]
 
                 if self.debugging:
                     if self.debug_3d_bool:
@@ -443,8 +485,8 @@ class VirxERLU(StandaloneBot):
                         self.debug[1].insert(0, f"Hitbox: {round(car.hitbox)}")
                         self.debug[1].insert(0, f"Location: {round(car.location)}")
 
-                        center = car.location
                         top = car.up * (car.hitbox.height / 2)
+                        center = car.location + top
                         front = car.forward * (car.hitbox.length / 2)
                         right = car.right * (car.hitbox.width / 2)
 
@@ -465,10 +507,10 @@ class VirxERLU(StandaloneBot):
                         self.line(top_back_right, top_front_right, hitbox_color)
 
                     if self.debug_2d_bool:
-                        # if len(self.sent_tmcp_packet_times) > 0:
-                        #     avg_tmcp_packets = sum(self.sent_tmcp_packet_times.values()) / len(self.sent_tmcp_packet_times)
+                        if self.debug_tmcp and len(self.sent_tmcp_packet_times) > 0:
+                            avg_tmcp_packets = round(sum(self.sent_tmcp_packet_times.values()) / len(self.sent_tmcp_packet_times), 2)
 
-                        #     self.debug[1].insert(0, f"Avg. TMCP packets / sec: {avg_tmcp_packets}")
+                            self.debug[1].insert(0, f"Avg. TMCP packets / sec: {avg_tmcp_packets}")
 
                         if self.delta_time != 0:
                             self.debug[1].insert(0, f"TPS: {round(1 / self.delta_time)}")
@@ -480,11 +522,6 @@ class VirxERLU(StandaloneBot):
 
                     if self.debug_ball_path:
                         self.polyline(tuple(Vector(*rlru.get_slice_index(i).location) for i in range(0, rlru.get_num_ball_slices(), self.debug_ball_path_precision * 2)), color=self.renderer.yellow())
-
-            end = time_ns()
-            self.tick_times.append(round((end - start) / 1_000_000, 3))
-            while len(self.tick_times) > 120:
-                del self.tick_times[0]
 
             print(flush=True, end="")
             return SimpleControllerState() if self.disable_driving else self.controller
@@ -577,6 +614,15 @@ class VirxERLU(StandaloneBot):
             if friend.index == packet['index']:
                 friend.tmcp_action = packet['action']
 
+    def handle_input_change(self, input_change: PlayerInputChange, seconds: float, frame_num: int):
+        pass
+
+    def handle_player_spectate(self, player_spectate: PlayerSpectate, seconds: float, frame_num: int):
+        pass
+
+    def handle_player_stat(self, player_stat: PlayerStatEvent, seconds: float, frame_num: int):
+        pass
+
     def handle_match_comm(self, msg: dict):
         pass
 
@@ -588,6 +634,10 @@ class VirxERLU(StandaloneBot):
 
     def init(self):
         pass
+
+    def demolished(self):
+        if not self.is_clear():
+            self.clear()
 
 
 class BaseRoutine:
@@ -626,8 +676,9 @@ class Car:
             car = packet.game_cars[self.index]
 
             self.name = car.name
-            if self.true_name is None: self.true_name = re.split(r' \(\d+\)$', self.name)[0]  # e.x. 'ABot (12)' will instead be just 'ABot'
+            self.true_name = re.split(r' \(\d+\)$', self.name)[0]  # e.x. 'ABot (12)' will instead be just 'ABot'
             self.team = car.team
+            self.team_side = (-1, 1)[car.team]
             self.hitbox = Hitbox(car.hitbox.length, car.hitbox.width, car.hitbox.height, Vector(car.hitbox_offset.x, car.hitbox_offset.y, car.hitbox_offset.z))
 
             self.update(packet)
@@ -637,6 +688,7 @@ class Car:
         self.name = None
         self.true_name = None
         self.team = -1
+        self.team_side = 0
         self.hitbox = Hitbox()
 
     def local(self, value: Vector) -> Vector:
@@ -679,6 +731,14 @@ class Car:
     def update(self, packet: GameTickPacket):
         car = packet.game_cars[self.index]
         car_phy = car.physics
+
+        if self.name != car.name or self.team != car.team:
+            # something changed so we'll update all this info too
+            self.name = car.name
+            self.team = car.team
+            self.team_side = (-1, 1)[car.team]
+            self.true_name = re.split(r' \(\d+\)$', self.name)[0]
+            self.hitbox = Hitbox(car.hitbox.length, car.hitbox.width, car.hitbox.height, Vector(car.hitbox_offset.x, car.hitbox_offset.y, car.hitbox_offset.z))
 
         if self.airborne and car.has_wheel_contact:
             self.land_time = packet.game_info.seconds_elapsed
