@@ -27,8 +27,8 @@ class Bot(VirxERLU):
             # Everywhere includes when the ball and the bot are on the ground
             shot = tools.find_aerial(self, self.foe_goal_shot)
 
-            # if shot is None:
-            #     shot = tools.find_any_aerial(self)
+            if shot is None:
+                shot = tools.find_any_aerial(self)
 
             # If we found a shot
             if shot is not None:

@@ -67,6 +67,13 @@ def defaultPD(agent: VirxERLU, local_target: Vector, upside_down: bool=False, up
     # points the car towards a given local target.
     # Direction can be changed to allow the car to steer towards a target while driving backwards
 
+    if inverse:
+        opp_mat = Matrix3.from_direction(-agent.me.forward, agent.me.up)
+        angular_velocity = opp_mat.dot(agent.me._angular_velocity)
+        local_target.x *= -1
+    else:
+        angular_velocity = agent.me.angular_velocity
+
     if up is None:
         up = agent.me.local(Vector(z=-1 if upside_down else 1))  # where "up" is in local coordinates
 
@@ -75,12 +82,6 @@ def defaultPD(agent: VirxERLU, local_target: Vector, upside_down: bool=False, up
         math.atan2(local_target.y, local_target.x),  # angle required to yaw towards target
         math.atan2(up.y, up.z)  # angle required to roll upright
     )
-
-    if inverse:
-        opp_mat = Matrix3.from_direction(-agent.me.forward, agent.me.up)
-        angular_velocity = opp_mat.dot(agent.me._angular_velocity)
-    else:
-        angular_velocity = agent.me.angular_velocity
 
     controller = _get_controller(np.array(target_angles, dtype=np.float32), angular_velocity._np, distance)
 

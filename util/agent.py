@@ -933,7 +933,7 @@ class Matrix3:
         return Vector(*self._np[2])
 
     def __getitem__(self, key: int) -> Vector:
-        return self.rotation[key]
+        return Vector(*self._np[key])
 
     def __str__(self) -> str:
         return f"[{self.forward}\n {self.right}\n {self.up}]"
@@ -954,7 +954,6 @@ class Matrix3:
 
         # generate the orientation matrix
         mat._np = np.array((forward._np, right._np, up._np), dtype=np.float32)
-        mat.rotation = (forward, right, up)
 
         # generate the pitch/yaw/roll
         mat.pitch = math.atan2(mat.forward.z, Vector(mat.forward.x, mat.forward.y).magnitude())
