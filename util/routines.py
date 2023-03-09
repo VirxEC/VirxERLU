@@ -791,12 +791,10 @@ class GoTo:
         elif self.rule1_timer != -1:
             self.rule1_timer = -1
 
-        dodge_time = distance_remaining / (abs(velocity) + utils.dodge_impulse(agent)) - 0.8
-
         if agent.me.airborne:
             agent.push(Recovery(self.target))
-        elif dodge_time >= 1.2 and agent.time - agent.me.land_time > 0.5:
-            if agent.me.boost < 48 and angle_to_target < 0.03 and (true_angle_to_target < 0.1 or distance_remaining > 4480) and velocity > 600:
+        elif agent.time - agent.me.land_time > 0.5:
+            if agent.me.boost < 88 and angle_to_target < 0.03 and (true_angle_to_target < 0.1 or distance_remaining > 4480) and velocity > 600:
                 agent.push(Flip(agent.me.local_location(self.target)))
             elif direction == -1 and velocity < 200:
                 agent.push(Flip(agent.me.local_location(self.target), True))
