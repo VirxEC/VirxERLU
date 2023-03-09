@@ -220,12 +220,12 @@ class JumpShot(BaseRoutine):
 
                 if agent.time - self.last_jump < 0.03:
                     agent.controller.jump = False
-                    utils.defaultThrottle(agent, self.jump_target[1])
+                    utils.defaultThrottle(agent, self.jump_target[0])
                 else:
                     agent.controller.jump = True
             else:
                 agent.controller.jump = True
-                local_final_target = agent.me.local_location(Vector(self.jump_target[0].x, self.jump_target[0].y, agent.me.location.z))
+                local_final_target = agent.me.local_location(Vector(self.jump_target[1].x, self.jump_target[1].y, agent.me.location.z))
                 utils.defaultDrive(agent, self.jump_target[0], local_final_target)
 
             return
