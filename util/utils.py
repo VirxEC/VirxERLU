@@ -180,6 +180,8 @@ def defaultThrottle(agent: VirxERLU, target_speed: float, target_angles: Optiona
                 agent.controller.handbrake = False
             else:
                 agent.controller.steer = agent.controller.yaw
+    else:
+        angle_to_target = 0
 
     (throttle, boost) = _get_throttle_and_boost(agent.boost_accel, target_speed, car_speed, angle_to_target, agent.me.up.z, agent.controller.handbrake)
     agent.controller.throttle = throttle

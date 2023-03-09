@@ -133,11 +133,11 @@ class VirxERLU(StandaloneBot):
         if self.game_mode in {"soccer", "rumble", "heetseeker"}:
             if self.game_map == "ThrowbackStadium_P":
                 self.print("Loading Soccer on Throwback Stadium")
-                rlru.load_soccer_throwback()
+                rlru.load_standard_throwback()
                 self.expected_pads = 44
             else:
                 self.print("Loading standard Soccer")
-                rlru.load_soccer()
+                rlru.load_standard()
                 self.expected_pads = 34
         elif self.game_mode == "dropshot":
             self.print("Loading Dropshot")
@@ -149,7 +149,7 @@ class VirxERLU(StandaloneBot):
             self.expected_pads = 20
         else:
             self.print("VirxERLU-RLib does not support this game mode: " + self.game_mode + "; Defaulting to soccer")
-            rlru.load_soccer()
+            rlru.load_standard()
 
         self.all: list[Car] = ()
         self.friends: list[Car] = ()

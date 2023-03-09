@@ -16,6 +16,7 @@ MAX_JUMP_HOLD_TIME = 0.2
 JUMP_MAX_DURATION = 0.2
 JUMP_SPEED = 291 + (2/3)
 JUMP_ACC = 1458 + (1/3)
+ON_GROUND_WAIT_TIME = 0.6
 
 
 class ShortShot(BaseRoutine):
@@ -82,13 +83,8 @@ class GroundShot(BaseRoutine):
         self.shot_vector = shot.shot_vector
         self.drive_direction = shot.drive_direction
         self.target_id = shot.target_id
-        self.end_next_tick = False
 
     def run(self, agent: VirxERLU):
-        if self.end_next_tick:
-            agent.pop()
-            return
-
         if agent.me.airborne:
             agent.push(Recovery())
             return
@@ -146,7 +142,7 @@ class GroundShot(BaseRoutine):
         if do_flip:
             flip_time = utils._fcap(320. / speed_required - 0.05, 0.1, 0.25)
             if flip_time - 0.05 < T < flip_time:
-                self.end_next_tick = True
+                agent.pop()
                 flip_dir = agent.me.local_location(future_ball_location + self.shot_vector.flatten() * agent.ball_radius)
                 agent.push(Flip(flip_dir))
 
@@ -165,10 +161,9 @@ class JumpShot(BaseRoutine):
         self.drive_direction = 1 if shot_info.is_forwards else -1
         self.shot_vector = Vector(*shot_info.shot_vector)
         self.jumping = False
-        self.jump_time = -1
+        self.jump_target = None
         self.last_jump = None
         self.dodge_params = None
-        self.recovering = False
 
     def update(self, shot: JumpShot):
         if self.intercept_time + 0.1 < shot.intercept_time or self.jumping:
@@ -191,15 +186,6 @@ class JumpShot(BaseRoutine):
         T = self.intercept_time - agent.time
         agent.dbg_3d(f"Time to intercept: {round(T, 1)}")
 
-        if self.recovering:
-            if T >= -0.25:
-                agent.controller.yaw = self.dodge_params[0]
-                agent.controller.pitch = self.dodge_params[1]
-            else:
-                agent.pop()
-                agent.push(Recovery())
-            return
-
         if agent.me.airborne and not self.jumping:
             agent.push(Recovery())
             return
@@ -207,8 +193,42 @@ class JumpShot(BaseRoutine):
         future_ball_location = Vector(*rlru.get_slice(self.intercept_time).location)
         agent.sphere(future_ball_location, agent.ball_radius, agent.renderer.purple())
 
-        if T <= 0.1 and self.jumping and self.dodge_params is not None and agent.ball.last_touch.car.index == agent.me.index and abs(self.intercept_time - agent.ball.last_touch.time) < 0.1:
-            self.recovering = True
+        if T <= -0.5 and self.jumping and agent.ball.last_touch.car.index == agent.me.index and abs(self.intercept_time - agent.ball.last_touch.time) < 0.75:
+            agent.pop()
+            agent.push(Recovery())
+            return
+
+        if self.jumping:
+            if T < 0.1:
+                if self.dodge_params is None:
+                    flip_dir = agent.me.local_location(future_ball_location + self.shot_vector * agent.ball_radius)
+                    target_angle = math.atan2(flip_dir.y, flip_dir.x)
+                    yaw = math.sin(target_angle)
+                    neg_pitch = math.cos(target_angle)  # negative pitch is down which flips us forward, so cosine and pitch are inversly related
+                    self.dodge_params = (
+                        yaw,
+                        -neg_pitch,
+                        utils._fsign(neg_pitch),  # throttle and cosine are directly related
+                    )
+
+                agent.controller.yaw = self.dodge_params[0]
+                agent.controller.pitch = self.dodge_params[1]
+                agent.controller.throttle = self.dodge_params[2]
+
+                if self.last_jump is None:
+                    self.last_jump = agent.time
+
+                if agent.time - self.last_jump < 0.03:
+                    agent.controller.jump = False
+                    utils.defaultThrottle(agent, self.jump_target[1])
+                else:
+                    agent.controller.jump = True
+            else:
+                agent.controller.jump = True
+                local_final_target = agent.me.local_location(Vector(self.jump_target[0].x, self.jump_target[0].y, agent.me.location.z))
+                utils.defaultPD(agent, local_final_target)
+                utils.defaultThrottle(agent, self.jump_target[1])
+
             return
 
         try:
@@ -249,7 +269,7 @@ class JumpShot(BaseRoutine):
         local_final_target = agent.me.local_location(Vector(final_target.x, final_target.y, agent.me.location.z))
 
         agent.dbg_2d(f"Required jump time: {round(shot_info.required_jump_time, 1)}")
-        if T < shot_info.required_jump_time:
+        if T <= shot_info.required_jump_time:
             self.jumping = True
 
         if not self.jumping:
@@ -257,39 +277,10 @@ class JumpShot(BaseRoutine):
             utils.defaultDrive(agent, speed_required, local_final_target, distance=distance)
             return
 
-        if not agent.me.airborne:
-            self.jump_time = agent.time
-
-        if agent.time - self.jump_time < MAX_JUMP_HOLD_TIME:
-            agent.controller.jump = True
-            utils.defaultPD(agent, local_final_target)
-
-        if T < 0.1:
-            if self.dodge_params is None:
-                flip_dir = agent.me.local_location(future_ball_location + self.shot_vector * agent.ball_radius)
-                target_angle = math.atan2(flip_dir.y, flip_dir.x)
-                yaw = math.sin(target_angle)
-                neg_pitch = math.cos(target_angle)  # negative pitch is down which flips us forward, so cosine and pitch are inversly related
-                self.dodge_params = (
-                    yaw,
-                    -neg_pitch,
-                    utils._fsign(neg_pitch),  # throttle and cosine are directly related
-                )
-
-            agent.controller.yaw = self.dodge_params[0]
-            agent.controller.pitch = self.dodge_params[1]
-            agent.controller.throttle = self.dodge_params[2]
-
-            if self.last_jump is None:
-                self.last_jump = agent.time
-
-            if agent.time - self.last_jump < 0.05:
-                agent.controller.jump = False
-                self.last_jump = False
-            else:
-                agent.controller.jump = True
-        elif agent.me.airborne:
-            utils.defaultThrottle(agent, speed_required)
+        self.jump_target = (final_target, speed_required)
+        agent.controller.jump = True
+        utils.defaultPD(agent, local_final_target)
+        utils.defaultThrottle(agent, self.jump_target[1])
 
     def on_push(self):
         rlru.confirm_target(self.target_id)
@@ -421,6 +412,7 @@ class AerialShot(BaseRoutine):
         self.intercept_time = shot_info.time
         self.target_id = target_id
         self.shot_vector = Vector(*shot_info.shot_vector)
+        self.wait_for_land = shot_info.wait_for_land
         self.jumping = False
         self.dodging = False
         self.jump_time = -1
@@ -429,7 +421,7 @@ class AerialShot(BaseRoutine):
         self.flip = (0, 0)
 
     def update(self, shot: AerialShot):
-        if self.intercept_time + 0.1 < shot.intercept_time or self.jumping:
+        if self.intercept_time + 0.1 < shot.intercept_time or self.jumping or self.flipping:
             return
 
         try:
@@ -443,6 +435,7 @@ class AerialShot(BaseRoutine):
         self.intercept_time = shot.intercept_time
         self.target_id = shot.target_id
         self.shot_vector = shot.shot_vector
+        self.wait_for_land = shot.wait_for_land
 
     def run(self, agent: VirxERLU):
         T = self.intercept_time - agent.time
@@ -469,9 +462,13 @@ class AerialShot(BaseRoutine):
             agent.push(BallRecovery())
             return
 
-        if agent.me.land_time + 0.6 > agent.time:
+        if self.wait_for_land or agent.me.land_time + ON_GROUND_WAIT_TIME >= agent.time:
             agent.dbg_2d("Waiting")
+
             agent.controller.throttle = 0.001
+            if not agent.me.airborne:
+                self.wait_for_land = False
+
             return
 
         try:
