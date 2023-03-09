@@ -226,8 +226,7 @@ class JumpShot(BaseRoutine):
             else:
                 agent.controller.jump = True
                 local_final_target = agent.me.local_location(Vector(self.jump_target[0].x, self.jump_target[0].y, agent.me.location.z))
-                utils.defaultPD(agent, local_final_target)
-                utils.defaultThrottle(agent, self.jump_target[1])
+                utils.defaultDrive(agent, self.jump_target[0], local_final_target)
 
             return
 
@@ -277,10 +276,9 @@ class JumpShot(BaseRoutine):
             utils.defaultDrive(agent, speed_required, local_final_target, distance=distance)
             return
 
-        self.jump_target = (final_target, speed_required)
+        self.jump_target = (speed_required, final_target)
         agent.controller.jump = True
-        utils.defaultPD(agent, local_final_target)
-        utils.defaultThrottle(agent, self.jump_target[1])
+        utils.defaultDrive(agent, self.jump_target[0], local_final_target)
 
     def on_push(self):
         rlru.confirm_target(self.target_id)

@@ -609,6 +609,7 @@ class Car:
         self.orientation = Matrix3()
         self.velocity = Vector()
         self._local_velocity = Vector()
+        self._angular_velocity = Vector()
         self.angular_velocity = Vector()
         self.demolished = False
         self.airborne = False
@@ -686,7 +687,8 @@ class Car:
         self.velocity = Vector.from_vector(car_phy.velocity)
         self._local_velocity = self.local(self.velocity)
         self.orientation = Matrix3.from_rotator(car_phy.rotation)
-        self.angular_velocity = self.orientation.dot((car_phy.angular_velocity.x, car_phy.angular_velocity.y, car_phy.angular_velocity.z))
+        self._angular_velocity = Vector.from_vector(car_phy.angular_velocity)
+        self.angular_velocity = self.orientation.dot(self._angular_velocity)
         self.demolished = car.is_demolished
         self.airborne = not car.has_wheel_contact
         self.supersonic = car.is_super_sonic
