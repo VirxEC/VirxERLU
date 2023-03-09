@@ -193,12 +193,12 @@ class JumpShot(BaseRoutine):
         future_ball_location = Vector(*rlru.get_slice(self.intercept_time).location)
         agent.sphere(future_ball_location, agent.ball_radius, agent.renderer.purple())
 
-        if T <= -0.5 and self.jumping and agent.ball.last_touch.car.index == agent.me.index and abs(self.intercept_time - agent.ball.last_touch.time) < 0.75:
-            agent.pop()
-            agent.push(Recovery())
-            return
-
         if self.jumping:
+            if T <= -0.5:
+                agent.pop()
+                agent.push(Recovery())
+                return
+
             if T < 0.1:
                 if self.dodge_params is None:
                     flip_dir = agent.me.local_location(future_ball_location + self.shot_vector * agent.ball_radius)
