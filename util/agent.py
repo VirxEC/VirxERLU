@@ -91,7 +91,7 @@ class VirxERLU(StandaloneBot):
         if self.handle_player_events and not self.tournament:
             self.socket_relay = SocketRelay()
             self.socket_relay.player_input_change_handlers.append(self.handle_input_change)
-            self.socket_relay.player_spectate_handler.append(self.handle_player_spectate)
+            self.socket_relay.player_spectate_handlers.append(self.handle_player_spectate)
             self.socket_relay.player_stat_handlers.append(self.handle_player_stat)
 
             self.print("Starting the player event handler...")

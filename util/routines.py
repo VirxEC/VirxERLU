@@ -91,13 +91,13 @@ class GroundShot(BaseRoutine):
 
         future_ball_location = Vector(*rlru.get_slice(self.intercept_time).location)
         agent.sphere(future_ball_location, agent.ball_radius, agent.renderer.purple())
-        do_flip = self.future_ball_location.y * agent.friend_team_side < 0
+        do_flip = future_ball_location.y * agent.friend_team_side < 0
+
+        T = self.intercept_time - agent.time
 
         if T <= 0.1 and not do_flip and agent.ball.last_touch.car.index == agent.me.index and abs(self.intercept_time - agent.ball.last_touch.time) < 0.1:
             self.recovering = True
             return
-
-        T = self.intercept_time - agent.time
 
         agent.dbg_3d(f"Time to intercept: {round(T, 1)}")
 
