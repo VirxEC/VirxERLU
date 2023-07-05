@@ -56,10 +56,10 @@ def _get_controller(target_angles: np.ndarray, angular_velocity: np.ndarray, dis
         steer = controlPID(target_angles[1], angular_velocity[2], distance)
     else:
         steer = controlPD(target_angles[1], 0)
-    pitch = controlPD(target_angles[0], angular_velocity[1] / 4)
-    yaw = controlPD(target_angles[1], -angular_velocity[2] / 4)
-    roll = controlPD(target_angles[2], angular_velocity[0] / 4)
-    
+    pitch = controlPD(target_angles[0], angular_velocity[1] / 4.08)
+    yaw = controlPD(target_angles[1], -angular_velocity[2] / 4.82)
+    roll = controlPD(target_angles[2], angular_velocity[0] / 3.38)
+
     return np.array((steer, pitch, yaw, roll), dtype=np.float32)
 
 
@@ -287,7 +287,7 @@ def turn_radius(v: float) -> float:
     # v is the magnitude of the velocity in the car's forward direction
     if v == 0:
         return 0
-    return 1.0 / curvature(min(abs(v), 2300)) 
+    return 1.0 / curvature(min(abs(v), 2300))
 
 
 def in_field(point: Vector, radius: float) -> bool:
@@ -492,7 +492,7 @@ def _get_ground_times(l: np.ndarray, v: np.ndarray, g: float) -> np.ndarray:
 
     # this is necessary because after we reach our terminal velocity, the equation becomes linear (distance_remaining / terminal_velocity)
     # NOTE: this is a simplification of what actually happens, which is a fair bit more complicated
-    terminal_velocity = math.copysign(2300 - np.linalg.norm(v[:2]), g)   
+    terminal_velocity = math.copysign(2300 - np.linalg.norm(v[:2]), g)
     falling_time_until_terminal_velocity = (terminal_velocity - v[2]) / g
     falling_distance_until_terminal_velocity = v[2] * falling_time_until_terminal_velocity + -g * (falling_time_until_terminal_velocity * falling_time_until_terminal_velocity) / 2
 
