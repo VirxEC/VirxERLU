@@ -56,9 +56,9 @@ def _get_controller(target_angles: np.ndarray, angular_velocity: np.ndarray, dis
         steer = controlPID(target_angles[1], angular_velocity[2], distance)
     else:
         steer = controlPD(target_angles[1], 0)
-    pitch = controlPD(target_angles[0], angular_velocity[1] / 4.08)
-    yaw = controlPD(target_angles[1], -angular_velocity[2] / 4.82)
-    roll = controlPD(target_angles[2], angular_velocity[0] / 3.38)
+    pitch = controlPD(target_angles[0], angular_velocity[1] / 3.4)
+    yaw = controlPD(target_angles[1], -angular_velocity[2] / 5.0)
+    roll = controlPD(target_angles[2], angular_velocity[0] / 3.1)
 
     return np.array((steer, pitch, yaw, roll), dtype=np.float32)
 
