@@ -569,7 +569,7 @@ class AerialShot(BaseRoutine):
             boost = False
 
             # only boost/throttle if we're facing the right direction
-            if (not self.jumping or shot_info.num_jumps != 2) and abs(agent.me.forward.angle(direction)) < 0.5:
+            if (not self.jumping or shot_info.num_jumps != 2) and abs(agent.me.forward.angle(direction)) < 0.1  :
                 # the change in velocity the bot needs to put it on an intercept course with the target
                 if agent.me.boost > 0 and delta_v > agent.boost_accel * agent.delta_time * 3 + AIR_THROTTLE_ACCEL * agent.delta_time:
                     agent.controller.boost = agent.me.airborne
